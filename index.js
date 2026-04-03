@@ -20,9 +20,9 @@ const myPortfolio = [
     { symbol: 'URA', name: 'URA (Uranium)', initialIls: 2318, isIL: false },
     { symbol: 'CIBR', name: 'CIBR', initialIls: 2234, isIL: false },
     { symbol: 'GOOGL', name: 'Google', initialIls: 1872, isIL: false },
-    { symbol: '^TA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
-    { symbol: '^TAFN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
-    { symbol: '^TA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
+    { symbol: '%5ETA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
+    { symbol: '%5ETAFN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
+    { symbol: '%5ETA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
 ];
 
 const watchlist = [
@@ -36,21 +36,21 @@ const watchlist = [
 
 async function getStockData(s) {
     try {
-        if (s.isIL || s.symbol.startsWith('^')) {
+        if (s.isIL || s.symbol.includes('%5E')) {
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}`;
             const res = await axios.get(url);
-            const meta = res.data.chart.result[0].meta;
+            const data = res.data.chart.result[0].meta;
             return {
-                c: meta.regularMarketPrice,
-                pc: meta.previousClose,
-                dp: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100
+                c: data.regularMarketPrice,
+                pc: data.previousClose,
+                dp: ((data.regularMarketPrice - data.previousClose) / data.previousClose) * 100
             };
         } else {
             const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`);
             return res.data;
         }
-    } catch (e) { 
-        return { c: 1, pc: 1, dp: 0 }; // מחזיר ערך ברירת מחדל כדי שלא ייעלם מהרשימה
+    } catch (e) {
+        return { c: 1, pc: 1, dp: 0 };
     }
 }
 
@@ -62,18 +62,6 @@ function checkGlobalMarketStatus() {
     const totalMin = hour * 60 + min;
     const isUSOpen = (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
     return isUSOpen ? "🟢 MARKET IS OPEN" : "⚪ MARKET IS CLOSED";
-}
-
-function isIndividualOpen(symbol) {
-    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
-    const day = now.getDay();
-    const hour = now.getHours();
-    const min = now.getMinutes();
-    const totalMin = hour * 60 + min;
-    if (symbol.includes('.TA')) {
-        return (day >= 0 && day <= 4) && (totalMin >= 600 && totalMin <= 1045);
-    }
-    return (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
 }
 
 async function getReport() {
@@ -105,7 +93,8 @@ async function getReport() {
     for (const r of results) {
         totalIls += r.currentValIls;
         totalProfit += r.profitTodayIls;
-        const icon = isIndividualOpen(r.symbol) ? (r.dp >= 0 ? "🟢" : "🔴") : "⚪";
+        const icon = (r.symbol.includes('.TA') || r.isIL) ? "⚪" : (checkGlobalMarketStatus().includes("OPEN") ? (r.dp >= 0 ? "🟢" : "🔴") : "⚪");
+        
         msg += icon + " *" + r.name + "*\n";
         msg += "💰 Value: ₪" + r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " | $" + (r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n";
         msg += "📈 Today: " + (r.profitTodayIls >= 0 ? "+" : "") + "₪" + r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " (" + r.dp.toFixed(2) + "%)\n";
@@ -134,4 +123,4 @@ schedule.scheduleJob('20 16 * * 1-5', () => getReport());
 schedule.scheduleJob('50 22 * * 1-5', () => getReport());
 schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Fixed Portfolio'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Force IL Bot'); }).listen(process.env.PORT || 3000);
