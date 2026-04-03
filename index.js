@@ -8,6 +8,7 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
+// רשימה אחת בלבד - בלי כפילויות
 const myPortfolio = [
     { symbol: 'URA', name: 'Uranium ETF (Owned)' },
     { symbol: 'AAPL', name: 'Apple' },
@@ -20,7 +21,6 @@ const myPortfolio = [
 ];
 
 async function sendStockUpdate(titlePrefix) {
-    // יצירת חותמת זמן של ישראל
     const now = new Date();
     const timeString = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
     const dateString = now.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -47,7 +47,6 @@ async function sendStockUpdate(titlePrefix) {
             message += "━━━━━━━━━━━━━━━\n";
         } catch (e) { console.error("Error fetching " + stock.symbol); }
     }
-    
     bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 }
 
@@ -69,15 +68,13 @@ bot.on('message', (msg) => {
     const text = msg.text.toLowerCase();
 
     if (text.includes("שוק") || text.includes("מצב") || text.includes("טבלה")) {
-        sendStockUpdate("⚡ *דוח ביצועים בזמן אמת* ⚡");
+        sendStockUpdate("⚡ *סטטוס שוק בזמן אמת* ⚡");
     } else if (text.includes("חדשות")) {
         sendMarketNews();
-    } else {
-        bot.sendMessage(chatId, "היי דוראל! כתוב 'שוק' לטבלה מלאה או 'חדשות' לעדכונים.");
     }
 });
 
-// דוח אוטומטי כל ערב ב-23:00 - כאן רשום "סגירת יום"
+// דוח אוטומטי סוף יום (שני-שישי ב-23:00)
 schedule.scheduleJob('0 23 * * 1-5', () => sendStockUpdate("🏁 *סיכום סגירת יום מסחר* 🏁"));
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Bot Ready with Timestamp'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Bot Clean & Final'); }).listen(process.env.PORT || 3000);
