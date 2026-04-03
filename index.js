@@ -20,9 +20,9 @@ const myPortfolio = [
     { symbol: 'URA', name: 'URA (Uranium)', initialIls: 2318, isIL: false },
     { symbol: 'CIBR', name: 'CIBR', initialIls: 2234, isIL: false },
     { symbol: 'GOOGL', name: 'Google', initialIls: 1872, isIL: false },
-    { symbol: '^TA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
-    { symbol: '^TAFIN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
-    { symbol: '^TA90.TA', name: 'TA-90 Index', initialIls: 1079, isIL: true }
+    { symbol: 'TA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
+    { symbol: 'TA-FINANCE.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
+    { symbol: 'TA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
 ];
 
 const watchlist = [
@@ -34,14 +34,30 @@ const watchlist = [
     { symbol: 'WDC', name: 'SanDisk (WDC)' }
 ];
 
+async function getStockData(s) {
+    try {
+        if (s.isIL || s.symbol.includes('.TA')) {
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}`;
+            const res = await axios.get(url);
+            const meta = res.data.chart.result[0].meta;
+            return {
+                c: meta.regularMarketPrice,
+                pc: meta.previousClose,
+                dp: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100
+            };
+        } else {
+            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`);
+            return res.data;
+        }
+    } catch (e) { return null; }
+}
+
 function checkGlobalMarketStatus() {
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
     const day = now.getDay();
     const hour = now.getHours();
     const min = now.getMinutes();
     const totalMin = hour * 60 + min;
-
-    // US Market logic (16:30 - 23:00)
     const isUSOpen = (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
     return isUSOpen ? "🟢 MARKET IS OPEN" : "⚪ MARKET IS CLOSED";
 }
@@ -52,7 +68,7 @@ function isIndividualOpen(symbol) {
     const hour = now.getHours();
     const min = now.getMinutes();
     const totalMin = hour * 60 + min;
-    if (symbol.endsWith('.TA') || symbol.startsWith('^')) {
+    if (symbol.endsWith('.TA')) {
         return (day >= 0 && day <= 4) && (totalMin >= 600 && totalMin <= 1045);
     }
     return (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
@@ -67,15 +83,12 @@ async function getReport() {
 
     let results = [];
     for (const s of myPortfolio) {
-        try {
-            const res = await axios.get("https://finnhub.io/api/v1/quote?symbol=" + s.symbol + "&token=" + finnhubKey);
-            const d = res.data;
-            if (d.c) {
-                const profitTodayIls = s.initialIls * (d.dp / 100);
-                const currentValIls = s.initialIls + profitTodayIls;
-                results.push({ ...s, currentValIls, profitTodayIls, dp: d.dp });
-            }
-        } catch (e) {}
+        const d = await getStockData(s);
+        if (d && d.c) {
+            const profitTodayIls = s.initialIls * (d.dp / 100);
+            const currentValIls = s.initialIls + profitTodayIls;
+            results.push({ ...s, currentValIls, profitTodayIls, dp: d.dp });
+        }
     }
 
     results.sort((a, b) => {
@@ -85,10 +98,8 @@ async function getReport() {
     });
 
     const marketStatus = checkGlobalMarketStatus();
-    let msg = "💎 *Dorel's Portfolio* 💎\n";
-    msg += "━━━━━━━━━━━━━━━\n";
-    msg += "*" + marketStatus + "*\n";
-    msg += "━━━━━━━━━━━━━━━\n\n";
+    let msg = "💎 *Dorel's Portfolio* 💎\n━━━━━━━━━━━━━━━\n";
+    msg += "*" + marketStatus + "*\n━━━━━━━━━━━━━━━\n\n";
 
     let totalIls = 0, totalProfit = 0;
     for (const r of results) {
@@ -108,11 +119,8 @@ async function getReport() {
 
     msg += "👀 *Watchlist:*\n";
     for (const s of watchlist) {
-        try {
-            const res = await axios.get("https://finnhub.io/api/v1/quote?symbol=" + s.symbol + "&token=" + finnhubKey);
-            const d = res.data;
-            if (d.c) msg += "⚪ *" + s.name + "*: " + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%\n";
-        } catch (e) {}
+        const d = await getStockData(s);
+        if (d && d.c) msg += "⚪ *" + s.name + "*: " + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%\n";
     }
 
     bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
@@ -122,12 +130,8 @@ bot.on('message', (msg) => {
     if (msg.text && (msg.text.includes("שוק") || msg.text.includes("תיק"))) getReport();
 });
 
-// Automation:
-// 10 minutes before US Open (16:20)
 schedule.scheduleJob('20 16 * * 1-5', () => getReport());
-// 10 minutes before US Close (22:50)
 schedule.scheduleJob('50 22 * * 1-5', () => getReport());
-// 10 minutes before IL Close (17:15)
 schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Live Status Bot'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Final Version'); }).listen(process.env.PORT || 3000);
