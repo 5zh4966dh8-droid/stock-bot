@@ -8,8 +8,6 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
-const axiosConfig = { headers: { 'User-Agent': 'Mozilla/5.0' } };
-
 const myPortfolio = [
     { symbol: 'URA', name: 'Uranium ETF' },
     { symbol: 'AAPL', name: 'Apple' },
@@ -18,46 +16,45 @@ const myPortfolio = [
     { symbol: 'GOOGL', name: 'Google' }
 ];
 
-// פונקציה משופרת להבאת שער הדולר
+// פונקציה שמביאה שער דולר ממקור חלופי ואמין
 async function getUSD() {
     try {
-        // ניסיון למשוך דרך סימול חלופי אם הראשון נכשל
-        const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=OANDA:USD_ILS&token=${finnhubKey}`, axiosConfig);
-        const price = res.data.c;
-        if (price) {
-            return `🇺🇸 🇮🇱 *שער הדולר:* **${price.toFixed(3)} ש"ח**`;
+        const res = await axios.get('https://open.er-api.com/v6/latest/USD');
+        const rate = res.data.rates.ILS;
+        if (rate) {
+            return `🇺🇸 🇮🇱 *שער הדולר:* **${rate.toFixed(3)} ש"ח**`;
         }
         return "⚠️ שער הדולר לא זמין כרגע.";
     } catch (e) { 
-        return "❌ שגיאה בחיבור לשער הדולר."; 
+        return "❌ שגיאה זמנית בחיבור לשער הדולר."; 
     }
 }
 
 async function sendMarketNews() {
     try {
-        const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`, axiosConfig);
+        const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`);
         const news = res.data.slice(0, 3);
-        if (!news || news.length === 0) return bot.sendMessage(chatId, "אין חדשות כרגע.");
-        
         let nMsg = "🗞 *חדשות שוק והשקעות* 🗞\n\n";
         news.forEach(i => {
             nMsg += `🔹 *${i.headline}*\n🔗 [לינק לכתבה](${i.url})\n\n`;
         });
         bot.sendMessage(chatId, nMsg, { parse_mode: 'Markdown', disable_web_page_preview: true });
-    } catch (e) { 
-        bot.sendMessage(chatId, "❌ שגיאה במשיכת חדשות.");
-    }
+    } catch (e) { bot.sendMessage(chatId, "❌ שגיאה במשיכת חדשות."); }
 }
 
 async function sendUpdate(title) {
     const usd = await getUSD();
     let msg = `${title}\n${usd}\n━━━━━━━━━━━━━━━\n\n`;
+    
     for (const s of myPortfolio) {
         try {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`, axiosConfig);
-            const c = res.data.dp;
-            msg += `${c >= 0 ? "🟢" : "🔴"} *${s.symbol}*\n💰 *$${res.data.c}* (${c >= 0 ? "+" : ""}${c.toFixed(2)}%)\n━━━━━━━━━━━━━━━\n\n`;
-        } catch (e) {}
+            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`);
+            const price = res.data.c;
+            const change = res.data.dp;
+            if (price) {
+                msg += `${change >= 0 ? "🟢" : "🔴"} *${s.symbol}*\n💰 *$${price}* (${change >= 0 ? "+" : ""}${change.toFixed(2)}%)\n━━━━━━━━━━━━━━━\n\n`;
+            }
+        } catch (e) { console.error("Error for " + s.symbol); }
     }
     bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
 }
@@ -76,18 +73,16 @@ bot.on('message', async (msg) => {
         await sendUpdate("📊 *מצב השוק* 📊");
     } else if (txt.length >= 2 && txt.length <= 5 && /^[A-Za-z]+$/.test(txt)) {
         try {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${txt.toUpperCase()}&token=${finnhubKey}`, axiosConfig);
+            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${txt.toUpperCase()}&token=${finnhubKey}`);
             if (res.data.c) {
                 const c = res.data.dp;
                 let sMsg = `🔍 *תוצאה עבור ${txt.toUpperCase()}*\n`;
                 sMsg += `${c >= 0 ? "🟢" : "🔴"} מחיר: *$${res.data.c}* (${c >= 0 ? "+" : ""}${c.toFixed(2)}%)\n`;
                 bot.sendMessage(chatId, sMsg, { parse_mode: 'Markdown' });
-            } else {
-                bot.sendMessage(chatId, "❌ לא מצאתי מניה עם הסימול הזה.");
             }
         } catch (e) { bot.sendMessage(chatId, "שגיאה בחיפוש."); }
     }
 });
 
 schedule.scheduleJob('0 23 * * 1-5', () => sendUpdate("🏁 *סיכום סגירה* 🏁"));
-http.createServer((req, res) => { res.writeHead(200); res.end('Alive'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Final Version Active'); }).listen(process.env.PORT || 3000);
