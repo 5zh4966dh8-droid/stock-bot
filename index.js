@@ -36,16 +36,20 @@ const watchlist = [
 
 async function getStockData(s) {
     try {
+        // משיכה מיאהו פייננס עבור המדדים הישראליים
         if (s.isIL || s.symbol.includes('.TA')) {
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}`;
             const res = await axios.get(url);
             const meta = res.data.chart.result[0].meta;
+            const currentPrice = meta.regularMarketPrice;
+            const prevClose = meta.previousClose;
             return {
-                c: meta.regularMarketPrice,
-                pc: meta.previousClose,
-                dp: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100
+                c: currentPrice,
+                pc: prevClose,
+                dp: ((currentPrice - prevClose) / prevClose) * 100
             };
         } else {
+            // משיכה מ-Finnhub עבור כל השאר
             const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`);
             return res.data;
         }
@@ -98,8 +102,10 @@ async function getReport() {
     });
 
     const marketStatus = checkGlobalMarketStatus();
-    let msg = "💎 *Dorel's Portfolio* 💎\n━━━━━━━━━━━━━━━\n";
-    msg += "*" + marketStatus + "*\n━━━━━━━━━━━━━━━\n\n";
+    let msg = "💎 *Dorel's Portfolio* 💎\n";
+    msg += "━━━━━━━━━━━━━━━\n";
+    msg += "*" + marketStatus + "*\n";
+    msg += "━━━━━━━━━━━━━━━\n\n";
 
     let totalIls = 0, totalProfit = 0;
     for (const r of results) {
@@ -134,4 +140,4 @@ schedule.scheduleJob('20 16 * * 1-5', () => getReport());
 schedule.scheduleJob('50 22 * * 1-5', () => getReport());
 schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Final Fix'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Yahoo Fix'); }).listen(process.env.PORT || 3000);
