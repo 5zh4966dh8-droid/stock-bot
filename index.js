@@ -14,8 +14,8 @@ const myStocks = [
     { symbol: 'URA', name: 'Uranium ETF' }
 ];
 
-// פונקציה לשליחת טבלת מניות
-async function sendStockUpdate(title) {
+// פונקציה לשליחת טבלת מניות (כולל בדיקת שעה)
+async function sendStockUpdate(title = "📊 *עדכון שוק* 📊") {
     let message = `${title}\n`;
     message += "━━━━━━━━━━━━━━━\n\n";
     for (const stock of myStocks) {
@@ -28,40 +28,42 @@ async function sendStockUpdate(title) {
             message += `💰 מחיר: *$${price.toLocaleString()}*\n`;
             message += `📊 שינוי: *${change >= 0 ? "+" : ""}${change.toFixed(2)}%*\n`;
             message += "━━━━━━━━━━━━━━━\n";
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Error fetching stock:", e); }
     }
     bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 }
 
-// פונקציה למשיכת חדשות
+// פונקציה לחדשות ממוקדות שוק בלבד
 async function sendMarketNews() {
     try {
-        const res = await axios.get(`https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`);
-        const news = res.data.slice(0, 3); // לוקחים את 3 הידיעות הראשונות
-        let message = "🗞 *חדשות חמות מהדקות האחרונות* 🗞\n\n";
+        // מחפשים חדשות בקטגוריית 'business' שהן יותר רלוונטיות למניות
+        const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`);
+        const news = res.data.slice(0, 4); 
+        let message = "🗞 *חדשות שוק והשקעות חמות* 🗞\n\n";
         
         news.forEach((item, index) => {
-            message += `${index + 1}. *${item.headline}*\n`;
-            message += `🔗 [לקריאה בהרחבה](${item.url})\n\n`;
+            message += `🔹 *${item.headline}*\n`;
+            message += `🔗 [קישור לידיעה](${item.url})\n\n`;
         });
         
-        bot.sendMessage(chatId, message, { parse_mode: 'Markdown', disable_web_page_preview: false });
+        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
     } catch (e) {
-        bot.sendMessage(chatId, "מצטער, הייתה שגיאה במשיכת החדשות.");
+        bot.sendMessage(chatId, "מצטער, הייתה שגיאה במשיכת חדשות השוק.");
     }
 }
 
-// האזנה להודעות שלך
+// מאזין חכם להודעות
 bot.on('message', (msg) => {
-    const text = msg.text ? msg.text.toLowerCase() : "";
-    if (msg.chat.id.toString() !== chatId) return;
+    if (!msg.text) return;
+    const text = msg.text.toLowerCase();
 
+    // בדיקה אם ההודעה מכילה "שוק" או "חדשות"
     if (text.includes("שוק")) {
         sendStockUpdate("⚡ *סטטוס שוק בזמן אמת* ⚡");
     } else if (text.includes("חדשות")) {
         sendMarketNews();
     } else {
-        bot.sendMessage(chatId, "אהלן דוראל! איך אפשר לעזור?\nכתוב 'מה מצב השוק?' לטבלה או 'חדשות' לעדכונים.");
+        bot.sendMessage(chatId, "היי דוראל, אני מחכה לפקודה שלך:\n\n1️⃣ כתוב 'מה מצב ה**שוק**?' לעדכון מחירים.\n2️⃣ כתוב '**חדשות**' לעדכונים כלכליים.");
     }
 });
 
@@ -69,4 +71,4 @@ bot.on('message', (msg) => {
 schedule.scheduleJob('0 23 * * 1-5', () => sendStockUpdate("🏁 *סיכום סגירת יום* 🏁"));
 
 // שרת חובה ל-Render
-http.createServer((req, res) => { res.writeHead(200); res.end('Bot Smart Brain Active'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Market Intelligence Active'); }).listen(process.env.PORT || 3000);
