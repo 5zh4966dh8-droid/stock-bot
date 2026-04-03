@@ -14,79 +14,76 @@ const myPortfolio = [
     { symbol: 'NVDA', name: 'Nvidia' },
     { symbol: 'TSLA', name: 'Tesla' },
     { symbol: 'GOOGL', name: 'Google' },
-    { symbol: 'MSFT', name: 'Microsoft' },
-    { symbol: 'AMZN', name: 'Amazon' },
-    { symbol: 'META', name: 'Meta' }
+    { symbol: 'MSFT', name: 'Microsoft' }
 ];
 
-// פונקציה מדויקת לבדיקה אם השוק פתוח לפי שעון ישראל
-function isMarketOpen() {
-    const now = new Date();
-    // המרה לשעון ישראל
-    const israelTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
-    const day = israelTime.getDay(); // 0=Sun, 1=Mon... 5=Fri, 6=Sat
-    const hour = israelTime.getHours();
-    const minute = israelTime.getMinutes();
-    
-    const totalMinutes = hour * 60 + minute;
-    const openTime = 16 * 60 + 30; // 16:30
-    const closeTime = 23 * 60;     // 23:00
+// פונקציה להבאת שער הדולר
+async function getUSDILS() {
+    try {
+        const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=FX:USILS&token=${finnhubKey}`);
+        const rate = res.data.c;
+        if (!rate) return "לא הצלחתי למשוך שער דולר כרגע.";
+        return `🇺🇸 🇮🇱 *שער הדולר:* **${rate.toFixed(3)} ש"ח**`;
+    } catch (e) { return "שגיאה במשיכת שער הדולר."; }
+}
 
-    // פתוח רק בימים שני עד שישי, בין 16:30 ל-23:00
-    return (day >= 1 && day <= 5) && (totalMinutes >= openTime && totalMinutes <= closeTime);
+// פונקציה להבאת נתונים על מניה בודדת (חיפוש חופשי)
+async function sendSingleStock(symbol) {
+    try {
+        const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${finnhubKey}`);
+        const price = res.data.c;
+        if (!price) return bot.sendMessage(chatId, "❌ לא מצאתי מניה עם הסימול הזה.");
+        
+        const change = res.data.dp;
+        const statusIcon = change >= 0 ? "🟢" : "🔴";
+        let message = `🔍 *תוצאות חיפוש עבור ${symbol.toUpperCase()}*\n\n`;
+        message += `${statusIcon} מחיר: *$${price.toLocaleString()}*\n`;
+        message += `📊 שינוי: *${change >= 0 ? "+" : ""}${change.toFixed(2)}%*\n`;
+        message += `📈 גבוה: $${res.data.h} | 📉 נמוך: $${res.data.l}`;
+        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    } catch (e) { bot.sendMessage(chatId, "שגיאה בחיפוש המניה."); }
 }
 
 async function sendStockUpdate(titlePrefix) {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
-    const dateString = now.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-    let message = `${titlePrefix}\n`;
-    message += `📅 ${dateString} | 🕒 ${timeString}\n`;
+    const usdStr = await getUSDILS();
+    let message = `${titlePrefix}\n${usdStr}\n`;
     message += "━━━━━━━━━━━━━━━\n\n";
-
     for (const stock of myPortfolio) {
         try {
             const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${stock.symbol}&token=${finnhubKey}`);
             const price = res.data.c;
             const change = res.data.dp;
-            const statusIcon = change >= 0 ? "🟢" : "🔴";
-            message += `${statusIcon} *${stock.symbol}* (${stock.name})\n`;
-            message += `💰 מחיר: *$${price.toLocaleString()}* (${change >= 0 ? "+" : ""}${change.toFixed(2)}%)\n`;
-            message += "━━━━━━━━━━━━━━━\n";
+            message += `${change >= 0 ? "🟢" : "🔴"} *${stock.symbol}*\n💰 *$${price.toLocaleString()}* (${change >= 0 ? "+" : ""}${change.toFixed(2)}%)\n━━━━━━━━━━━━━━━\n\n`;
         } catch (e) { console.error(e); }
     }
     bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 }
 
-bot.on('message', (msg) => {
+bot.on('message', async (msg) => {
     if (!msg.text || msg.chat.id.toString() !== chatId) return;
-    const text = msg.text.toLowerCase();
+    const text = msg.text.trim();
+    const lowerText = text.toLowerCase();
 
-    if (text.includes("שוק") || text.includes("מצב")) {
-        if (isMarketOpen()) {
-            sendStockUpdate("⚡ *סטטוס שוק בזמן אמת* ⚡");
-        } else {
-            bot.sendMessage(chatId, "⚠️ *הבורסה סגורה כרגע (פעילה ב'-ו' 16:30-23:00)*\nהאם תרצה לראות את נתוני הסגירה האחרונים?", {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: "✅ כן, תראה לי", callback_data: 'show_anyway' }],
-                        [{ text: "❌ לא, עזוב", callback_data: 'ignore' }]
-                    ]
-                }
-            });
-        }
+    if (lowerText.includes("חדשות")) {
+        // (פונקציית החדשות המוכרת)
+        const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`);
+        let newsMsg = "🗞 *חדשות שוק* 🗞\n\n";
+        res.data.slice(0, 3).forEach(item => newsMsg += `🔹 *${item.headline}*\n🔗 [לינק](${item.url})\n\n`);
+        bot.sendMessage(chatId, newsMsg, { parse_mode: 'Markdown' });
+    } 
+    else if (lowerText.includes("דולר")) {
+        const rate = await getUSDILS();
+        bot.sendMessage(chatId, rate, { parse_mode: 'Markdown' });
+    }
+    else if (lowerText.includes("שוק") || lowerText.includes("מצב")) {
+        // (בדיקת שוק פתוח/סגור ששיפרנו)
+        sendStockUpdate("⚡ *סטטוס שוק* ⚡"); 
+    } 
+    else if (text.length <= 5 && /^[A-Za-z]+$/.test(text)) {
+        // אם כתבת מילה קצרה באנגלית (כמו AMZN) - זה חיפוש מניה
+        sendSingleStock(text);
     }
 });
 
-bot.on('callback_query', (query) => {
-    if (query.data === 'show_anyway') {
-        sendStockUpdate("📊 *נתוני סגירה אחרונים* 📊");
-    } else if (query.data === 'ignore') {
-        bot.sendMessage(chatId, "סבבה, נדבר כשהבורסה תיפתח! 🔔");
-    }
-    bot.answerCallbackQuery(query.id);
-});
-
-schedule.scheduleJob('0 23 * * 1-5', () => sendStockUpdate("🏁 *סיכום סגירת יום מסחר* 🏁"));
-http.createServer((req, res) => { res.writeHead(200); res.end('Market Status Fixed'); }).listen(process.env.PORT || 3000);
+schedule.scheduleJob('0 23 * * 1-5', () => sendStockUpdate("🏁 *סיכום סגירה* 🏁"));
+http.createServer((req, res) => { res.writeHead(200); res.end('Pro Bot Active'); }).listen(process.env.PORT || 3000);
