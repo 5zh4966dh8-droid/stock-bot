@@ -1,6 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const http = require('http');
+const schedule = require('node-schedule');
 
 const token = '8504502159:AAEVZoVnSXqaV1zMq2MiHsfdlMeyHORJEXw';
 const chatId = '7326639240';
@@ -14,7 +15,7 @@ const myStocks = [
 ];
 
 async function sendStockUpdate() {
-    let message = "🏦 *סיכום שוק יומי* 🏦\n";
+    let message = "🏁 *סיכום סוף יום מסחר* 🏁\n";
     message += "━━━━━━━━━━━━━━━\n\n";
 
     for (const stock of myStocks) {
@@ -26,25 +27,28 @@ async function sendStockUpdate() {
             const trend = change >= 0 ? "+" : "";
 
             message += `${statusIcon} *${stock.symbol}* (${stock.name})\n`;
-            message += `💰 מחיר: *$${price.toLocaleString()}*\n`;
-            message += `📊 שינוי: *${trend}${change.toFixed(2)}%*\n`;
+            message += `💰 מחיר סגירה: *$${price.toLocaleString()}*\n`;
+            message += `📊 שינוי יומי: *${trend}${change.toFixed(2)}%*\n`;
             message += "━━━━━━━━━━━━━━━\n";
         } catch (e) {
             console.error("Error with " + stock.symbol);
         }
     }
     
-    message += "\n📱 *הבוט פעיל ומנטר עבורך.*";
-    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' }).catch(err => console.log('Telegram error:', err));
+    message += "\n✅ *הדוח נשלח אוטומטית בסיום המסחר.*";
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 }
 
-// הפעלה ראשונית
-sendStockUpdate();
+// תזמון לשעה 23:00 בכל יום (שני עד שישי - ימי מסחר)
+const job = schedule.scheduleJob('0 23 * * 1-5', function() {
+    sendStockUpdate();
+});
+
+// הודעת אישור בטרמינל שהתזמון עובד
+console.log("הבוט מכוון לשלוח דוח בכל ערב ב-23:00");
 
 // שרת חובה ל-Render
 http.createServer((req, res) => {
     res.writeHead(200);
-    res.end('Bot is running');
+    res.end('Bot is running and scheduled for 23:00');
 }).listen(process.env.PORT || 3000);
-
-console.log("Bot is alive!");
