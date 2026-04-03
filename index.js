@@ -20,9 +20,9 @@ const myPortfolio = [
     { symbol: 'URA', name: 'URA (Uranium)', initialIls: 2318, isIL: false },
     { symbol: 'CIBR', name: 'CIBR', initialIls: 2234, isIL: false },
     { symbol: 'GOOGL', name: 'Google', initialIls: 1872, isIL: false },
-    { symbol: 'TA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
-    { symbol: 'TAFN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
-    { symbol: 'TA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
+    { symbol: '^TA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
+    { symbol: '^TAFN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
+    { symbol: '^TA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
 ];
 
 const watchlist = [
@@ -36,24 +36,22 @@ const watchlist = [
 
 async function getStockData(s) {
     try {
-        // משיכה מיאהו פייננס עבור המדדים הישראליים
-        if (s.isIL || s.symbol.includes('.TA')) {
+        if (s.isIL || s.symbol.startsWith('^')) {
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}`;
             const res = await axios.get(url);
             const meta = res.data.chart.result[0].meta;
-            const currentPrice = meta.regularMarketPrice;
-            const prevClose = meta.previousClose;
             return {
-                c: currentPrice,
-                pc: prevClose,
-                dp: ((currentPrice - prevClose) / prevClose) * 100
+                c: meta.regularMarketPrice,
+                pc: meta.previousClose,
+                dp: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100
             };
         } else {
-            // משיכה מ-Finnhub עבור כל השאר
             const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`);
             return res.data;
         }
-    } catch (e) { return null; }
+    } catch (e) { 
+        return { c: 1, pc: 1, dp: 0 }; // מחזיר ערך ברירת מחדל כדי שלא ייעלם מהרשימה
+    }
 }
 
 function checkGlobalMarketStatus() {
@@ -72,7 +70,7 @@ function isIndividualOpen(symbol) {
     const hour = now.getHours();
     const min = now.getMinutes();
     const totalMin = hour * 60 + min;
-    if (symbol.endsWith('.TA')) {
+    if (symbol.includes('.TA')) {
         return (day >= 0 && day <= 4) && (totalMin >= 600 && totalMin <= 1045);
     }
     return (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
@@ -88,11 +86,9 @@ async function getReport() {
     let results = [];
     for (const s of myPortfolio) {
         const d = await getStockData(s);
-        if (d && d.c) {
-            const profitTodayIls = s.initialIls * (d.dp / 100);
-            const currentValIls = s.initialIls + profitTodayIls;
-            results.push({ ...s, currentValIls, profitTodayIls, dp: d.dp });
-        }
+        const profitTodayIls = s.initialIls * (d.dp / 100);
+        const currentValIls = s.initialIls + profitTodayIls;
+        results.push({ ...s, currentValIls, profitTodayIls, dp: d.dp });
     }
 
     results.sort((a, b) => {
@@ -102,10 +98,8 @@ async function getReport() {
     });
 
     const marketStatus = checkGlobalMarketStatus();
-    let msg = "💎 *Dorel's Portfolio* 💎\n";
-    msg += "━━━━━━━━━━━━━━━\n";
-    msg += "*" + marketStatus + "*\n";
-    msg += "━━━━━━━━━━━━━━━\n\n";
+    let msg = "💎 *Dorel's Portfolio* 💎\n━━━━━━━━━━━━━━━\n";
+    msg += "*" + marketStatus + "*\n━━━━━━━━━━━━━━━\n\n";
 
     let totalIls = 0, totalProfit = 0;
     for (const r of results) {
@@ -126,7 +120,7 @@ async function getReport() {
     msg += "👀 *Watchlist:*\n";
     for (const s of watchlist) {
         const d = await getStockData(s);
-        if (d && d.c) msg += "⚪ *" + s.name + "*: " + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%\n";
+        msg += "⚪ *" + s.name + "*: " + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%\n";
     }
 
     bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
@@ -140,4 +134,4 @@ schedule.scheduleJob('20 16 * * 1-5', () => getReport());
 schedule.scheduleJob('50 22 * * 1-5', () => getReport());
 schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Yahoo Fix'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Fixed Portfolio'); }).listen(process.env.PORT || 3000);
