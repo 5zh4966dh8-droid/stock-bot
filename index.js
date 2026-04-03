@@ -19,19 +19,21 @@ const myPortfolio = [
     { symbol: 'META', name: 'Meta' }
 ];
 
-// פונקציה לבדיקה אם השוק פתוח (16:30-23:00, ב'-ו')
+// פונקציה מדויקת לבדיקה אם השוק פתוח לפי שעון ישראל
 function isMarketOpen() {
     const now = new Date();
-    const options = { timeZone: 'Asia/Jerusalem', hour12: false };
-    const day = parseInt(new Intl.DateTimeFormat('en-GB', { ...options, weekday: 'numeric' }).format(now)); // 1=Mon, 5=Fri
-    const hour = parseInt(new Intl.DateTimeFormat('en-GB', { ...options, hour: 'numeric' }).format(now));
-    const minute = parseInt(new Intl.DateTimeFormat('en-GB', { ...options, minute: 'numeric' }).format(now));
+    // המרה לשעון ישראל
+    const israelTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
+    const day = israelTime.getDay(); // 0=Sun, 1=Mon... 5=Fri, 6=Sat
+    const hour = israelTime.getHours();
+    const minute = israelTime.getMinutes();
     
-    const currentTimeInMinutes = hour * 60 + minute;
+    const totalMinutes = hour * 60 + minute;
     const openTime = 16 * 60 + 30; // 16:30
-    const closeTime = 23 * 0;     // 23:00
+    const closeTime = 23 * 60;     // 23:00
 
-    return (day >= 1 && day <= 5) && (currentTimeInMinutes >= openTime && currentTimeInMinutes <= 1380);
+    // פתוח רק בימים שני עד שישי, בין 16:30 ל-23:00
+    return (day >= 1 && day <= 5) && (totalMinutes >= openTime && totalMinutes <= closeTime);
 }
 
 async function sendStockUpdate(titlePrefix) {
@@ -65,7 +67,7 @@ bot.on('message', (msg) => {
         if (isMarketOpen()) {
             sendStockUpdate("⚡ *סטטוס שוק בזמן אמת* ⚡");
         } else {
-            bot.sendMessage(chatId, "⚠️ *הבורסה סגורה כרגע.*\nהאם תרצה לראות את נתוני הסגירה האחרונים?", {
+            bot.sendMessage(chatId, "⚠️ *הבורסה סגורה כרגע (פעילה ב'-ו' 16:30-23:00)*\nהאם תרצה לראות את נתוני הסגירה האחרונים?", {
                 reply_markup: {
                     inline_keyboard: [
                         [{ text: "✅ כן, תראה לי", callback_data: 'show_anyway' }],
@@ -74,12 +76,9 @@ bot.on('message', (msg) => {
                 }
             });
         }
-    } else if (text.includes("חדשות")) {
-        // (פונקציית החדשות נשארת כאן...)
     }
 });
 
-// טיפול בכפתורים
 bot.on('callback_query', (query) => {
     if (query.data === 'show_anyway') {
         sendStockUpdate("📊 *נתוני סגירה אחרונים* 📊");
@@ -90,4 +89,4 @@ bot.on('callback_query', (query) => {
 });
 
 schedule.scheduleJob('0 23 * * 1-5', () => sendStockUpdate("🏁 *סיכום סגירת יום מסחר* 🏁"));
-http.createServer((req, res) => { res.writeHead(200); res.end('Market Status Bot Ready'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Market Status Fixed'); }).listen(process.env.PORT || 3000);
