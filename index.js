@@ -15,7 +15,7 @@ const myStocks = [
 
 async function sendStockUpdate() {
     let message = "🏦 *סיכום שוק יומי* 🏦\n";
-    message += "----------------------------------\n\n";
+    message += "━━━━━━━━━━━━━━━\n\n";
 
     for (const stock of myStocks) {
         try {
@@ -28,21 +28,23 @@ async function sendStockUpdate() {
             message += `${statusIcon} *${stock.symbol}* (${stock.name})\n`;
             message += `💰 מחיר: *$${price.toLocaleString()}*\n`;
             message += `📊 שינוי: *${trend}${change.toFixed(2)}%*\n`;
-            message += "----------------------------------\n";
+            message += "━━━━━━━━━━━━━━━\n";
         } catch (e) {
             console.error("Error with " + stock.symbol);
         }
     }
     
     message += "\n📱 *הבוט פעיל ומנטר עבורך.*";
-    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' }).catch(err => console.log('Telegram error:', err));
 }
 
-// שליחת הודעת בדיקה מעוצבת מיד עם העדכון
+// הפעלה ראשונית
 sendStockUpdate();
 
-// שרת בשביל Render
+// שרת חובה ל-Render
 http.createServer((req, res) => {
     res.writeHead(200);
-    res.end('Bot is alive');
+    res.end('Bot is running');
 }).listen(process.env.PORT || 3000);
+
+console.log("Bot is alive!");
