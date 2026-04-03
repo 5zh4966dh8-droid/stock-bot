@@ -65,3 +65,9 @@ async function sendDailyReport() {
 sendDailyReport();
 cron.schedule('0 23 * * 1-5', sendDailyReport);
 console.log("הבוט פעיל ומחכה לתזמון היומי ב-23:00.");
+
+const http = require('http');
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot is alive and kicking!');
+}).listen(process.env.PORT || 3000);
