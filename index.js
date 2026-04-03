@@ -8,82 +8,79 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
+// הגדרת כותרות לבקשות כדי שלא ניחסם
+const axiosConfig = { headers: { 'User-Agent': 'Mozilla/5.0' } };
+
 const myPortfolio = [
-    { symbol: 'URA', name: 'Uranium ETF (Owned)' },
+    { symbol: 'URA', name: 'Uranium ETF' },
     { symbol: 'AAPL', name: 'Apple' },
     { symbol: 'NVDA', name: 'Nvidia' },
     { symbol: 'TSLA', name: 'Tesla' },
-    { symbol: 'GOOGL', name: 'Google' },
-    { symbol: 'MSFT', name: 'Microsoft' }
+    { symbol: 'GOOGL', name: 'Google' }
 ];
 
-// פונקציה להבאת שער הדולר
-async function getUSDILS() {
+async function getUSD() {
     try {
-        const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=FX:USILS&token=${finnhubKey}`);
-        const rate = res.data.c;
-        if (!rate) return "לא הצלחתי למשוך שער דולר כרגע.";
-        return `🇺🇸 🇮🇱 *שער הדולר:* **${rate.toFixed(3)} ש"ח**`;
-    } catch (e) { return "שגיאה במשיכת שער הדולר."; }
+        const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=FX:USILS&token=${finnhubKey}`, axiosConfig);
+        return res.data.c ? `🇺🇸 🇮🇱 *שער הדולר:* **${res.data.c.toFixed(3)} ש"ח**` : "";
+    } catch (e) { return "❌ שגיאה בשער הדולר."; }
 }
 
-// פונקציה להבאת נתונים על מניה בודדת (חיפוש חופשי)
-async function sendSingleStock(symbol) {
+async function sendMarketNews() {
     try {
-        const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${finnhubKey}`);
-        const price = res.data.c;
-        if (!price) return bot.sendMessage(chatId, "❌ לא מצאתי מניה עם הסימול הזה.");
+        const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`, axiosConfig);
+        const news = res.data.slice(0, 3);
+        if (news.length === 0) return bot.sendMessage(chatId, "אין חדשות כרגע.");
         
-        const change = res.data.dp;
-        const statusIcon = change >= 0 ? "🟢" : "🔴";
-        let message = `🔍 *תוצאות חיפוש עבור ${symbol.toUpperCase()}*\n\n`;
-        message += `${statusIcon} מחיר: *$${price.toLocaleString()}*\n`;
-        message += `📊 שינוי: *${change >= 0 ? "+" : ""}${change.toFixed(2)}%*\n`;
-        message += `📈 גבוה: $${res.data.h} | 📉 נמוך: $${res.data.l}`;
-        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-    } catch (e) { bot.sendMessage(chatId, "שגיאה בחיפוש המניה."); }
+        let nMsg = "🗞 *חדשות שוק והשקעות* 🗞\n\n";
+        news.forEach(i => {
+            nMsg += `🔹 *${i.headline}*\n🔗 [לינק לכתבה](${i.url})\n\n`;
+        });
+        bot.sendMessage(chatId, nMsg, { parse_mode: 'Markdown', disable_web_page_preview: true });
+    } catch (e) { 
+        bot.sendMessage(chatId, "❌ שגיאה במשיכת חדשות. נסה שוב בעוד דקה.");
+    }
 }
 
-async function sendStockUpdate(titlePrefix) {
-    const usdStr = await getUSDILS();
-    let message = `${titlePrefix}\n${usdStr}\n`;
-    message += "━━━━━━━━━━━━━━━\n\n";
-    for (const stock of myPortfolio) {
+async function sendUpdate(title) {
+    const usd = await getUSD();
+    let msg = `${title}\n${usd}\n━━━━━━━━━━━━━━━\n\n`;
+    for (const s of myPortfolio) {
         try {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${stock.symbol}&token=${finnhubKey}`);
-            const price = res.data.c;
-            const change = res.data.dp;
-            message += `${change >= 0 ? "🟢" : "🔴"} *${stock.symbol}*\n💰 *$${price.toLocaleString()}* (${change >= 0 ? "+" : ""}${change.toFixed(2)}%)\n━━━━━━━━━━━━━━━\n\n`;
-        } catch (e) { console.error(e); }
+            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`, axiosConfig);
+            const c = res.data.dp;
+            msg += `${c >= 0 ? "🟢" : "🔴"} *${s.symbol}*\n💰 *$${res.data.c}* (${c >= 0 ? "+" : ""}${c.toFixed(2)}%)\n━━━━━━━━━━━━━━━\n\n`;
+        } catch (e) {}
     }
-    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
 }
 
 bot.on('message', async (msg) => {
     if (!msg.text || msg.chat.id.toString() !== chatId) return;
-    const text = msg.text.trim();
-    const lowerText = text.toLowerCase();
+    const txt = msg.text.trim();
+    const low = txt.toLowerCase();
 
-    if (lowerText.includes("חדשות")) {
-        // (פונקציית החדשות המוכרת)
-        const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`);
-        let newsMsg = "🗞 *חדשות שוק* 🗞\n\n";
-        res.data.slice(0, 3).forEach(item => newsMsg += `🔹 *${item.headline}*\n🔗 [לינק](${item.url})\n\n`);
-        bot.sendMessage(chatId, newsMsg, { parse_mode: 'Markdown' });
-    } 
-    else if (lowerText.includes("דולר")) {
-        const rate = await getUSDILS();
-        bot.sendMessage(chatId, rate, { parse_mode: 'Markdown' });
-    }
-    else if (lowerText.includes("שוק") || lowerText.includes("מצב")) {
-        // (בדיקת שוק פתוח/סגור ששיפרנו)
-        sendStockUpdate("⚡ *סטטוס שוק* ⚡"); 
-    } 
-    else if (text.length <= 5 && /^[A-Za-z]+$/.test(text)) {
-        // אם כתבת מילה קצרה באנגלית (כמו AMZN) - זה חיפוש מניה
-        sendSingleStock(text);
+    if (low.includes("חדשות")) {
+        await sendMarketNews();
+    } else if (low.includes("דולר")) {
+        const d = await getUSD();
+        bot.sendMessage(chatId, d, { parse_mode: 'Markdown' });
+    } else if (low.includes("שוק") || low.includes("מצב")) {
+        await sendUpdate("📊 *מצב השוק* 📊");
+    } else if (txt.length >= 2 && txt.length <= 5 && /^[A-Za-z]+$/.test(txt)) {
+        try {
+            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${txt.toUpperCase()}&token=${finnhubKey}`, axiosConfig);
+            if (res.data.c) {
+                const c = res.data.dp;
+                let sMsg = `🔍 *תוצאה עבור ${txt.toUpperCase()}*\n`;
+                sMsg += `${c >= 0 ? "🟢" : "🔴"} מחיר: *$${res.data.c}* (${c >= 0 ? "+" : ""}${c.toFixed(2)}%)\n`;
+                bot.sendMessage(chatId, sMsg, { parse_mode: 'Markdown' });
+            } else {
+                bot.sendMessage(chatId, "❌ לא מצאתי מניה עם הסימול הזה.");
+            }
+        } catch (e) { bot.sendMessage(chatId, "שגיאה בחיפוש."); }
     }
 });
 
-schedule.scheduleJob('0 23 * * 1-5', () => sendStockUpdate("🏁 *סיכום סגירה* 🏁"));
-http.createServer((req, res) => { res.writeHead(200); res.end('Pro Bot Active'); }).listen(process.env.PORT || 3000);
+schedule.scheduleJob('0 23 * * 1-5', () => sendUpdate("🏁 *סיכום סגירה* 🏁"));
+http.createServer((req, res) => { res.writeHead(200); res.end('Alive'); }).listen(process.env.PORT || 3000);
