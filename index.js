@@ -8,67 +8,76 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
-const myStocks = [
+const myPortfolio = [
+    { symbol: 'URA', name: 'Uranium ETF (Owned)' },
     { symbol: 'AAPL', name: 'Apple' },
+    { symbol: 'NVDA', name: 'Nvidia' },
+    { symbol: 'TSLA', name: 'Tesla' },
     { symbol: 'GOOGL', name: 'Google' },
-    { symbol: 'URA', name: 'Uranium ETF' }
+    { symbol: 'MSFT', name: 'Microsoft' },
+    { symbol: 'AMZN', name: 'Amazon' },
+    { symbol: 'META', name: 'Meta' }
 ];
 
-// פונקציה לשליחת טבלת מניות (כולל בדיקת שעה)
-async function sendStockUpdate(title = "📊 *עדכון שוק* 📊") {
-    let message = `${title}\n`;
+async function sendStockUpdate(titlePrefix) {
+    // יצירת חותמת זמן של ישראל
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
+    const dateString = now.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    let message = `${titlePrefix}\n`;
+    message += `📅 ${dateString} | 🕒 ${timeString}\n`;
     message += "━━━━━━━━━━━━━━━\n\n";
-    for (const stock of myStocks) {
+
+    for (const stock of myPortfolio) {
         try {
             const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${stock.symbol}&token=${finnhubKey}`);
             const price = res.data.c;
             const change = res.data.dp;
+            const high = res.data.h;
+            const low = res.data.l;
+            
             const statusIcon = change >= 0 ? "🟢" : "🔴";
+            const trend = change >= 0 ? "+" : "";
+
             message += `${statusIcon} *${stock.symbol}* (${stock.name})\n`;
             message += `💰 מחיר: *$${price.toLocaleString()}*\n`;
-            message += `📊 שינוי: *${change >= 0 ? "+" : ""}${change.toFixed(2)}%*\n`;
+            message += `📊 שינוי: *${trend}${change.toFixed(2)}%*\n`;
+            message += `📈 גבוה: $${high} | 📉 נמוך: $${low}\n`;
             message += "━━━━━━━━━━━━━━━\n";
-        } catch (e) { console.error("Error fetching stock:", e); }
+        } catch (e) { console.error("Error fetching " + stock.symbol); }
     }
+    
     bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 }
 
-// פונקציה לחדשות ממוקדות שוק בלבד
 async function sendMarketNews() {
     try {
-        // מחפשים חדשות בקטגוריית 'business' שהן יותר רלוונטיות למניות
         const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`);
         const news = res.data.slice(0, 4); 
-        let message = "🗞 *חדשות שוק והשקעות חמות* 🗞\n\n";
-        
-        news.forEach((item, index) => {
+        let message = "🗞 *חדשות שוק והשקעות* 🗞\n\n";
+        news.forEach((item) => {
             message += `🔹 *${item.headline}*\n`;
-            message += `🔗 [קישור לידיעה](${item.url})\n\n`;
+            message += `🔗 [לכתבה המלאה](${item.url})\n\n`;
         });
-        
         bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-    } catch (e) {
-        bot.sendMessage(chatId, "מצטער, הייתה שגיאה במשיכת חדשות השוק.");
-    }
+    } catch (e) { bot.sendMessage(chatId, "שגיאה במשיכת חדשות."); }
 }
 
-// מאזין חכם להודעות
 bot.on('message', (msg) => {
-    if (!msg.text) return;
+    if (!msg.text || msg.chat.id.toString() !== chatId) return;
     const text = msg.text.toLowerCase();
 
-    // בדיקה אם ההודעה מכילה "שוק" או "חדשות"
-    if (text.includes("שוק")) {
-        sendStockUpdate("⚡ *סטטוס שוק בזמן אמת* ⚡");
+    if (text.includes("שוק") || text.includes("מצב") || text.includes("טבלה")) {
+        sendStockUpdate("⚡ *דוח ביצועים בזמן אמת* ⚡");
     } else if (text.includes("חדשות")) {
         sendMarketNews();
     } else {
-        bot.sendMessage(chatId, "היי דוראל, אני מחכה לפקודה שלך:\n\n1️⃣ כתוב 'מה מצב ה**שוק**?' לעדכון מחירים.\n2️⃣ כתוב '**חדשות**' לעדכונים כלכליים.");
+        bot.sendMessage(chatId, "היי דוראל! כתוב 'שוק' לטבלה מלאה או 'חדשות' לעדכונים.");
     }
 });
 
-// תזמון אוטומטי (שני-שישי ב-23:00)
-schedule.scheduleJob('0 23 * * 1-5', () => sendStockUpdate("🏁 *סיכום סגירת יום* 🏁"));
+// דוח אוטומטי כל ערב ב-23:00 - כאן רשום "סגירת יום"
+schedule.scheduleJob('0 23 * * 1-5', () => sendStockUpdate("🏁 *סיכום סגירת יום מסחר* 🏁"));
 
-// שרת חובה ל-Render
-http.createServer((req, res) => { res.writeHead(200); res.end('Market Intelligence Active'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Bot Ready with Timestamp'); }).listen(process.env.PORT || 3000);
