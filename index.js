@@ -8,34 +8,45 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
-// התיק המדויק שלך
 const myPortfolio = [
     { symbol: 'VOO', name: 'VOO', initialIls: 61000, isIL: false },
     { symbol: 'VGT', name: 'VGT', initialIls: 33833, isIL: false },
     { symbol: 'VTI', name: 'VTI', initialIls: 26642, isIL: false },
     { symbol: 'VXUS', name: 'VXUS', initialIls: 26238, isIL: false },
     { symbol: 'AAPL', name: 'Apple', initialIls: 12149, isIL: false },
+    { symbol: 'NLR', name: 'NLR', initialIls: 5076, isIL: false },
     { symbol: 'BOTZ', name: 'BOTZ', initialIls: 2959, isIL: false },
     { symbol: 'MU', name: 'MU', initialIls: 2318, isIL: false },
-    { symbol: 'URA', name: 'URA (אורניום)', initialIls: 2318, isIL: false },
+    { symbol: 'URA', name: 'URA (Uranium)', initialIls: 2318, isIL: false },
     { symbol: 'CIBR', name: 'CIBR', initialIls: 2234, isIL: false },
     { symbol: 'GOOGL', name: 'Google', initialIls: 1872, isIL: false },
-    { symbol: 'NLR', name: 'NLR', initialIls: 576, isIL: false },
-    { symbol: '^TA125.TA', name: 'ת"א 125', initialIls: 9177, isIL: true },
-    { symbol: '^TAFIN.TA', name: 'ת"א פיננסים', initialIls: 4386, isIL: true },
-    { symbol: '^TA90.TA', name: 'ת"א 90', initialIls: 1079, isIL: true }
+    { symbol: '^TA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
+    { symbol: '^TAFIN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
+    { symbol: '^TA90.TA', name: 'TA-90 Index', initialIls: 1079, isIL: true }
 ];
 
 const watchlist = [
-    { symbol: 'NVDA', name: 'אנבידיה' },
-    { symbol: 'TSLA', name: 'טסלה' },
-    { symbol: 'META', name: 'מטא' },
+    { symbol: 'NVDA', name: 'Nvidia' },
+    { symbol: 'TSLA', name: 'Tesla' },
+    { symbol: 'META', name: 'Meta' },
     { symbol: 'SMH', name: 'SMH' },
     { symbol: 'OPEN', name: 'OPEN' },
-    { symbol: 'WDC', name: 'WDC (סנדיסק)' }
+    { symbol: 'WDC', name: 'SanDisk (WDC)' }
 ];
 
-function isMarketOpen(symbol) {
+function checkGlobalMarketStatus() {
+    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
+    const day = now.getDay();
+    const hour = now.getHours();
+    const min = now.getMinutes();
+    const totalMin = hour * 60 + min;
+
+    // US Market logic (16:30 - 23:00)
+    const isUSOpen = (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
+    return isUSOpen ? "🟢 MARKET IS OPEN" : "⚪ MARKET IS CLOSED";
+}
+
+function isIndividualOpen(symbol) {
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
     const day = now.getDay();
     const hour = now.getHours();
@@ -44,7 +55,7 @@ function isMarketOpen(symbol) {
     if (symbol.endsWith('.TA') || symbol.startsWith('^')) {
         return (day >= 0 && day <= 4) && (totalMin >= 600 && totalMin <= 1045);
     }
-    return (day >= 1 && day <= 5) && (totalMin >= 930 && totalMin <= 1380);
+    return (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
 }
 
 async function getReport() {
@@ -67,32 +78,35 @@ async function getReport() {
         } catch (e) {}
     }
 
-    // מיון: קודם כל זרות לפי שווי, ואז ישראליות לפי שווי
     results.sort((a, b) => {
         if (a.isIL && !b.isIL) return 1;
         if (!a.isIL && b.isIL) return -1;
         return b.currentValIls - a.currentValIls;
     });
 
-    let msg = "💎 *תיק ההשקעות של דוראל* 💎\n━━━━━━━━━━━━━━━\n\n";
-    let totalIls = 0, totalProfit = 0;
+    const marketStatus = checkGlobalMarketStatus();
+    let msg = "💎 *Dorel's Portfolio* 💎\n";
+    msg += "━━━━━━━━━━━━━━━\n";
+    msg += "*" + marketStatus + "*\n";
+    msg += "━━━━━━━━━━━━━━━\n\n";
 
+    let totalIls = 0, totalProfit = 0;
     for (const r of results) {
         totalIls += r.currentValIls;
         totalProfit += r.profitTodayIls;
-        const icon = isMarketOpen(r.symbol) ? (r.dp >= 0 ? "🟢" : "🔴") : "⚪";
+        const icon = isIndividualOpen(r.symbol) ? (r.dp >= 0 ? "🟢" : "🔴") : "⚪";
         msg += icon + " *" + r.name + "*\n";
-        msg += "💰 שווי: ₪" + r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " | $" + (r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n";
-        msg += "📈 שינוי: " + (r.profitTodayIls >= 0 ? "+" : "") + "₪" + r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " (" + r.dp.toFixed(2) + "%)\n";
+        msg += "💰 Value: ₪" + r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " | $" + (r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n";
+        msg += "📈 Today: " + (r.profitTodayIls >= 0 ? "+" : "") + "₪" + r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " (" + r.dp.toFixed(2) + "%)\n";
         msg += "━━━━━━━━━━━━━━━\n";
     }
 
-    msg += "\n👑 *סיכום תיק כולל:*\n";
-    msg += "💰 שווי שוק: *₪" + totalIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + "*\n";
-    msg += "💵 שווי בדולר: *$" + (totalIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "*\n";
-    msg += "📊 יומי: " + (totalProfit >= 0 ? "🟢 +" : "🔴 ") + "₪" + totalProfit.toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n\n";
+    msg += "\n👑 *Total Summary:*\n";
+    msg += "💰 Market Value: *₪" + totalIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + "*\n";
+    msg += "💵 USD Value: *$" + (totalIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "*\n";
+    msg += "📊 Daily P/L: " + (totalProfit >= 0 ? "🟢 +" : "🔴 ") + "₪" + totalProfit.toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n\n";
 
-    msg += "👀 *רשימת מעקב:*\n";
+    msg += "👀 *Watchlist:*\n";
     for (const s of watchlist) {
         try {
             const res = await axios.get("https://finnhub.io/api/v1/quote?symbol=" + s.symbol + "&token=" + finnhubKey);
@@ -108,8 +122,12 @@ bot.on('message', (msg) => {
     if (msg.text && (msg.text.includes("שוק") || msg.text.includes("תיק"))) getReport();
 });
 
-// אוטומציה: סיכום יומי ב-23:00 (ארה"ב) וב-17:30 (ישראל בימי חול)
-schedule.scheduleJob('30 17 * * 0-4', () => getReport());
-schedule.scheduleJob('0 23 * * 1-5', () => getReport());
+// Automation:
+// 10 minutes before US Open (16:20)
+schedule.scheduleJob('20 16 * * 1-5', () => getReport());
+// 10 minutes before US Close (22:50)
+schedule.scheduleJob('50 22 * * 1-5', () => getReport());
+// 10 minutes before IL Close (17:15)
+schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Final Master Bot'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Live Status Bot'); }).listen(process.env.PORT || 3000);
