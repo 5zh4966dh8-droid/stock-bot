@@ -40,25 +40,24 @@ async function getStockData(s) {
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}`;
             const res = await axios.get(url);
             const data = res.data.chart.result[0].meta;
-            return {
-                c: data.regularMarketPrice,
-                pc: data.previousClose,
-                dp: ((data.regularMarketPrice - data.previousClose) / data.previousClose) * 100
-            };
+            return { c: data.regularMarketPrice, pc: data.previousClose, dp: ((data.regularMarketPrice - data.previousClose) / data.previousClose) * 100 };
         } else {
             const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`);
             return res.data;
         }
-    } catch (e) {
-        return { c: 1, pc: 1, dp: 0 };
-    }
+    } catch (e) { return { c: 1, pc: 1, dp: 0 }; }
+}
+
+async function getMarketNews() {
+    try {
+        const res = await axios.get(`https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`);
+        return res.data.slice(0, 3).map(n => `▪️ *${n.headline}*`).join('\n');
+    } catch (e) { return "No news available."; }
 }
 
 function checkGlobalMarketStatus() {
     const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
-    const day = now.getDay();
-    const hour = now.getHours();
-    const min = now.getMinutes();
+    const day = now.getDay(), hour = now.getHours(), min = now.getMinutes();
     const totalMin = hour * 60 + min;
     const isUSOpen = (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
     return isUSOpen ? "🟢 MARKET IS OPEN" : "⚪ MARKET IS CLOSED";
@@ -85,42 +84,43 @@ async function getReport() {
         return b.currentValIls - a.currentValIls;
     });
 
-    const marketStatus = checkGlobalMarketStatus();
-    let msg = "💎 *Dorel's Portfolio* 💎\n━━━━━━━━━━━━━━━\n";
-    msg += "*" + marketStatus + "*\n━━━━━━━━━━━━━━━\n\n";
+    let msg = `💎 *Dorel's Portfolio* 💎\n━━━━━━━━━━━━━━━\n`;
+    msg += `🌎 ${checkGlobalMarketStatus()}\n`;
+    msg += `💵 USD/ILS: *${usdToIls.toFixed(2)}*\n`;
+    msg += `━━━━━━━━━━━━━━━\n\n`;
 
     let totalIls = 0, totalProfit = 0;
     for (const r of results) {
         totalIls += r.currentValIls;
         totalProfit += r.profitTodayIls;
-        const icon = (r.symbol.includes('.TA') || r.isIL) ? "⚪" : (checkGlobalMarketStatus().includes("OPEN") ? (r.dp >= 0 ? "🟢" : "🔴") : "⚪");
-        
-        msg += icon + " *" + r.name + "*\n";
-        msg += "💰 Value: ₪" + r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " | $" + (r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n";
-        msg += "📈 Today: " + (r.profitTodayIls >= 0 ? "+" : "") + "₪" + r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " (" + r.dp.toFixed(2) + "%)\n";
-        msg += "━━━━━━━━━━━━━━━\n";
+        const icon = r.isIL ? "⚪" : (checkGlobalMarketStatus().includes("OPEN") ? (r.dp >= 0 ? "🟢" : "🔴") : "⚪");
+        msg += `${icon} *${r.name}*\n`;
+        msg += `💰 Value: ₪${r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0})} | $${(r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0})}\n`;
+        msg += `📈 Today: ${(r.profitTodayIls >= 0 ? "+" : "")}₪${r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0})} (${r.dp.toFixed(2)}%)\n`;
+        msg += `━━━━━━━━━━━━━━━\n`;
     }
 
-    msg += "\n👑 *Total Summary:*\n";
-    msg += "💰 Market Value: *₪" + totalIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + "*\n";
-    msg += "💵 USD Value: *$" + (totalIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "*\n";
-    msg += "📊 Daily P/L: " + (totalProfit >= 0 ? "🟢 +" : "🔴 ") + "₪" + totalProfit.toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n\n";
+    msg += `\n👑 *Total Summary:*\n`;
+    msg += `💰 Market Value: *₪${totalIls.toLocaleString(undefined, {maximumFractionDigits: 0})}*\n`;
+    msg += `💵 USD Value: *$${(totalIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0})}*\n`;
+    msg += `📊 Daily P/L: ${(totalProfit >= 0 ? "🟢 +" : "🔴 ")}₪${totalProfit.toLocaleString(undefined, {maximumFractionDigits: 0})}\n\n`;
 
-    msg += "👀 *Watchlist:*\n";
+    msg += `👀 *Watchlist:*\n`;
     for (const s of watchlist) {
         const d = await getStockData(s);
-        msg += "⚪ *" + s.name + "*: " + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%\n";
+        msg += `⚪ *${s.name}*: ${(d.dp >= 0 ? "+" : "")}${d.dp.toFixed(2)}%\n`;
     }
+
+    msg += `\n📰 *Latest Market News:*\n`;
+    msg += await getMarketNews();
 
     bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
 }
 
-bot.on('message', (msg) => {
-    if (msg.text && (msg.text.includes("שוק") || msg.text.includes("תיק"))) getReport();
-});
+bot.on('message', (msg) => { if (msg.text && (msg.text.includes("שוק") || msg.text.includes("תיק"))) getReport(); });
 
 schedule.scheduleJob('20 16 * * 1-5', () => getReport());
 schedule.scheduleJob('50 22 * * 1-5', () => getReport());
 schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Force IL Bot'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Full Suite Bot'); }).listen(process.env.PORT || 3000);
