@@ -21,7 +21,7 @@ const myPortfolio = [
     { symbol: 'CIBR', name: 'CIBR', initialIls: 2234, isIL: false },
     { symbol: 'GOOGL', name: 'Google', initialIls: 1872, isIL: false },
     { symbol: 'TA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
-    { symbol: 'TA-FINANCE.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
+    { symbol: 'TAFN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
     { symbol: 'TA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
 ];
 
@@ -134,4 +134,4 @@ schedule.scheduleJob('20 16 * * 1-5', () => getReport());
 schedule.scheduleJob('50 22 * * 1-5', () => getReport());
 schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Final Version'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Final Fix'); }).listen(process.env.PORT || 3000);
