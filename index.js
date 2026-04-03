@@ -8,21 +8,22 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
+// התיק המדויק שלך
 const myPortfolio = [
     { symbol: 'VOO', name: 'VOO', initialIls: 61000, isIL: false },
     { symbol: 'VGT', name: 'VGT', initialIls: 33833, isIL: false },
     { symbol: 'VTI', name: 'VTI', initialIls: 26642, isIL: false },
     { symbol: 'VXUS', name: 'VXUS', initialIls: 26238, isIL: false },
     { symbol: 'AAPL', name: 'Apple', initialIls: 12149, isIL: false },
-    { symbol: '^TA125.TA', name: 'ת"א 125', initialIls: 9177, isIL: true },
-    { symbol: '^TAFIN.TA', name: 'ת"א פיננסים', initialIls: 4386, isIL: true },
     { symbol: 'BOTZ', name: 'BOTZ', initialIls: 2959, isIL: false },
     { symbol: 'MU', name: 'MU', initialIls: 2318, isIL: false },
     { symbol: 'URA', name: 'URA (אורניום)', initialIls: 2318, isIL: false },
     { symbol: 'CIBR', name: 'CIBR', initialIls: 2234, isIL: false },
     { symbol: 'GOOGL', name: 'Google', initialIls: 1872, isIL: false },
-    { symbol: '^TA90.TA', name: 'ת"א 90', initialIls: 1079, isIL: true },
-    { symbol: 'NLR', name: 'NLR', initialIls: 576, isIL: false }
+    { symbol: 'NLR', name: 'NLR', initialIls: 576, isIL: false },
+    { symbol: '^TA125.TA', name: 'ת"א 125', initialIls: 9177, isIL: true },
+    { symbol: '^TAFIN.TA', name: 'ת"א פיננסים', initialIls: 4386, isIL: true },
+    { symbol: '^TA90.TA', name: 'ת"א 90', initialIls: 1079, isIL: true }
 ];
 
 const watchlist = [
@@ -40,7 +41,6 @@ function isMarketOpen(symbol) {
     const hour = now.getHours();
     const min = now.getMinutes();
     const totalMin = hour * 60 + min;
-
     if (symbol.endsWith('.TA') || symbol.startsWith('^')) {
         return (day >= 0 && day <= 4) && (totalMin >= 600 && totalMin <= 1045);
     }
@@ -67,6 +67,7 @@ async function getReport() {
         } catch (e) {}
     }
 
+    // מיון: קודם כל זרות לפי שווי, ואז ישראליות לפי שווי
     results.sort((a, b) => {
         if (a.isIL && !b.isIL) return 1;
         if (!a.isIL && b.isIL) return -1;
@@ -74,14 +75,12 @@ async function getReport() {
     });
 
     let msg = "💎 *תיק ההשקעות של דוראל* 💎\n━━━━━━━━━━━━━━━\n\n";
-    let totalIls = 0;
-    let totalProfit = 0;
+    let totalIls = 0, totalProfit = 0;
 
     for (const r of results) {
         totalIls += r.currentValIls;
         totalProfit += r.profitTodayIls;
         const icon = isMarketOpen(r.symbol) ? (r.dp >= 0 ? "🟢" : "🔴") : "⚪";
-        
         msg += icon + " *" + r.name + "*\n";
         msg += "💰 שווי: ₪" + r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " | $" + (r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n";
         msg += "📈 שינוי: " + (r.profitTodayIls >= 0 ? "+" : "") + "₪" + r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0}) + " (" + r.dp.toFixed(2) + "%)\n";
@@ -109,4 +108,8 @@ bot.on('message', (msg) => {
     if (msg.text && (msg.text.includes("שוק") || msg.text.includes("תיק"))) getReport();
 });
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Portfolio Active'); }).listen(process.env.PORT || 3000);
+// אוטומציה: סיכום יומי ב-23:00 (ארה"ב) וב-17:30 (ישראל בימי חול)
+schedule.scheduleJob('30 17 * * 0-4', () => getReport());
+schedule.scheduleJob('0 23 * * 1-5', () => getReport());
+
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Final Master Bot'); }).listen(process.env.PORT || 3000);
