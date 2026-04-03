@@ -12,12 +12,14 @@ const usPortfolio = [
     { symbol: 'URA', name: 'Uranium ETF' },
     { symbol: 'AAPL', name: 'Apple' },
     { symbol: 'NVDA', name: 'Nvidia' },
-    { symbol: 'TSLA', name: 'Tesla' }
+    { symbol: 'TSLA', name: 'Tesla' },
+    { symbol: 'META', name: 'Meta' }
 ];
 
 const ilPortfolio = [
     { symbol: 'LUMI.TA', name: 'לאומי' },
     { symbol: 'POLI.TA', name: 'פועלים' },
+    { symbol: 'NICE.TA', name: 'נייס' },
     { symbol: 'ICL.TA', name: 'איי.סי.אל' }
 ];
 
@@ -27,7 +29,7 @@ function getIsraelTime() {
 
 function isUSOpen() {
     const il = getIsraelTime();
-    const day = il.getDay(); // 1-5 (Mon-Fri)
+    const day = il.getDay(); 
     const hour = il.getHours();
     const min = il.getMinutes();
     const total = hour * 60 + min;
@@ -36,7 +38,7 @@ function isUSOpen() {
 
 function isILOpen() {
     const il = getIsraelTime();
-    const day = il.getDay(); // 0-4 (Sun-Thu)
+    const day = il.getDay(); 
     const hour = il.getHours();
     const min = il.getMinutes();
     const total = hour * 60 + min;
@@ -46,18 +48,23 @@ function isILOpen() {
 async function sendPortfolioUpdate(portfolio, title, isIsrael = false) {
     const il = getIsraelTime();
     const timeStr = il.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-    let message = `\${title}\n🕒 \${timeStr}\n━━━━━━━━━━━━━━━\n\n`;
+    const dateStr = il.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+    
+    let message = "*" + title + "*\n";
+    message += "📅 " + dateStr + " | 🕒 " + timeStr + "\n";
+    message += "━━━━━━━━━━━━━━━\n\n";
     
     for (const s of portfolio) {
         try {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=\${s.symbol}&token=\${finnhubKey}`);
+            const res = await axios.get("https://finnhub.io/api/v1/quote?symbol=" + s.symbol + "&token=" + finnhubKey);
             const d = res.data;
             if (d.c && d.c > 0) {
                 const icon = d.dp >= 0 ? "🟢" : "🔴";
                 const cur = isIsrael ? "₪" : "$";
-                message += `\${icon} *\${s.name}*\n`;
-                message += `💰: *\${cur}\${d.c}* (\${d.dp >= 0 ? "+" : ""}\${d.dp.toFixed(2)}%)\n`;
-                message += `📈 \${d.h} | 📉 \${d.l}\n━━━━━━━━━━━━━━━\n\n`;
+                message += icon + " *" + s.name + "* (" + s.symbol.replace('.TA','') + ")\n";
+                message += "💰 מחיר: *" + cur + d.c.toLocaleString() + "* (" + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%)\n";
+                message += "📈 גבוה: " + d.h + " | 📉 נמוך: " + d.l + "\n";
+                message += "━━━━━━━━━━━━━━━\n";
             }
         } catch (e) {}
     }
@@ -69,36 +76,33 @@ bot.on('message', async (msg) => {
     const txt = msg.text.trim().toLowerCase();
     
     if (txt.includes("שוק") || txt.includes("מצב")) {
-        // בדיקת ישראל
         if (isILOpen()) {
-            await sendPortfolioUpdate(ilPortfolio, "🇮🇱 *בורסת תל אביב - זמן אמת*", true);
+            await sendPortfolioUpdate(ilPortfolio, "🇮🇱 בורסת תל אביב - זמן אמת", true);
         } else {
-            bot.sendMessage(chatId, "🇮🇱 *בורסת ישראל סגורה כרגע.*", {
-                reply_markup: { inline_keyboard: [[{ text: "✅ בכל זאת הצג ישראל", callback_data: 'get_il' }]] }
+            bot.sendMessage(chatId, "🇮🇱 *בורסת ישראל סגורה כרגע*", {
+                reply_markup: { inline_keyboard: [[{ text: "הצג נתוני סגירה לישראל", callback_data: 'get_il' }]] }
             });
         }
 
-        // בדיקת ארה"ב
         if (isUSOpen()) {
-            await sendPortfolioUpdate(usPortfolio, "🇺🇸 *בורסת ארה\"ב - זמן אמת*");
+            await sendPortfolioUpdate(usPortfolio, "🇺🇸 בורסת ארה\"ב - זמן אמת");
         } else {
-            bot.sendMessage(chatId, "🇺🇸 *בורסת ארה\"ב סגורה כרגע.*", {
-                reply_markup: { inline_keyboard: [[{ text: "✅ בכל זאת הצג ארה\"ב", callback_data: 'get_us' }]] }
+            bot.sendMessage(chatId, "🇺🇸 *בורסת ארה\"ב סגורה כרגע*", {
+                reply_markup: { inline_keyboard: [[{ text: "הצג נתוני סגירה לארה\"ב", callback_data: 'get_us' }]] }
             });
         }
     }
 });
 
 bot.on('callback_query', async (q) => {
-    if (q.data === 'get_il') await sendPortfolioUpdate(ilPortfolio, "📊 *נתוני סגירה - ישראל*", true);
-    if (q.data === 'get_us') await sendPortfolioUpdate(usPortfolio, "📊 *נתוני סגירה - ארה\"ב*");
+    if (q.data === 'get_il') await sendPortfolioUpdate(ilPortfolio, "📊 נתוני סגירה - ישראל", true);
+    if (q.data === 'get_us') await sendPortfolioUpdate(usPortfolio, "📊 נתוני סגירה - ארה\"ב");
     bot.answerCallbackQuery(q.id);
 });
 
-// אוטומציה - ללא שאלות (פשוט שולח בזמן הנכון)
-schedule.scheduleJob('0 10 * * 0-4', () => sendPortfolioUpdate(ilPortfolio, "🔔 *פתיחת מסחר בתל אביב* 🇮🇱", true));
-schedule.scheduleJob('30 17 * * 0-4', () => sendPortfolioUpdate(ilPortfolio, "🏁 *סיכום מסחר בתל אביב* 🇮🇱", true));
-schedule.scheduleJob('30 16 * * 1-5', () => sendPortfolioUpdate(usPortfolio, "🔔 *פתיחת מסחר בוול סטריט* 🇺🇸"));
-schedule.scheduleJob('0 23 * * 1-5', () => sendPortfolioUpdate(usPortfolio, "🏁 *סיכום מסחר בוול סטריט* 🇺🇸"));
+schedule.scheduleJob('0 10 * * 0-4', () => sendPortfolioUpdate(ilPortfolio, "🔔 פתיחת מסחר בתל אביב 🇮🇱", true));
+schedule.scheduleJob('30 17 * * 0-4', () => sendPortfolioUpdate(ilPortfolio, "🏁 סיכום מסחר בתל אביב 🇮🇱", true));
+schedule.scheduleJob('30 16 * * 1-5', () => sendPortfolioUpdate(usPortfolio, "🔔 פתיחת מסחר בוול סטריט 🇺🇸"));
+schedule.scheduleJob('0 23 * * 1-5', () => sendPortfolioUpdate(usPortfolio, "🏁 סיכום מסחר בוול סטריט 🇺🇸"));
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Pro V2'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Pro Fixed'); }).listen(process.env.PORT || 3000);
