@@ -38,21 +38,29 @@ async function getStockData(s) {
     try {
         if (s.isIL || s.symbol.includes('%5E')) {
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}`;
-            const res = await axios.get(url);
+            const res = await axios.get(url, { timeout: 5000 });
             const data = res.data.chart.result[0].meta;
             return { c: data.regularMarketPrice, pc: data.previousClose, dp: ((data.regularMarketPrice - data.previousClose) / data.previousClose) * 100 };
         } else {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`);
+            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`, { timeout: 5000 });
             return res.data;
         }
     } catch (e) { return { c: 1, pc: 1, dp: 0 }; }
 }
 
+async function getUsdRate() {
+    try {
+        const res = await axios.get('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });
+        return res.data.rates.ILS || 3.65;
+    } catch (e) { return 3.65; }
+}
+
 async function getMarketNews() {
     try {
-        const res = await axios.get(`https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`);
+        const res = await axios.get(`https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`, { timeout: 5000 });
+        if (!res.data || res.data.length === 0) return "No news available.";
         return res.data.slice(0, 3).map(n => `▪️ *${n.headline}*`).join('\n');
-    } catch (e) { return "No news available."; }
+    } catch (e) { return "News service currently unavailable."; }
 }
 
 function checkGlobalMarketStatus() {
@@ -64,12 +72,7 @@ function checkGlobalMarketStatus() {
 }
 
 async function getReport() {
-    let usdToIls = 3.65;
-    try {
-        const rate = await axios.get('https://open.er-api.com/v6/latest/USD');
-        usdToIls = rate.data.rates.ILS;
-    } catch (e) {}
-
+    const usdToIls = await getUsdRate();
     let results = [];
     for (const s of myPortfolio) {
         const d = await getStockData(s);
@@ -112,7 +115,8 @@ async function getReport() {
     }
 
     msg += `\n📰 *Latest Market News:*\n`;
-    msg += await getMarketNews();
+    const news = await getMarketNews();
+    msg += news;
 
     bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
 }
@@ -123,4 +127,4 @@ schedule.scheduleJob('20 16 * * 1-5', () => getReport());
 schedule.scheduleJob('50 22 * * 1-5', () => getReport());
 schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Full Suite Bot'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Full Suite Fixed'); }).listen(process.env.PORT || 3000);
