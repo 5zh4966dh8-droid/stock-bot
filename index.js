@@ -58,15 +58,23 @@ async function sendPortfolioUpdate(portfolio, title, isIsrael = false) {
         try {
             const res = await axios.get("https://finnhub.io/api/v1/quote?symbol=" + s.symbol + "&token=" + finnhubKey);
             const d = res.data;
+            
+            // אם יש מחיר (גדול מ-0)
             if (d.c && d.c > 0) {
                 const icon = d.dp >= 0 ? "🟢" : "🔴";
                 const cur = isIsrael ? "₪" : "$";
                 message += icon + " *" + s.name + "* (" + s.symbol.replace('.TA','') + ")\n";
                 message += "💰 מחיר: *" + cur + d.c.toLocaleString() + "* (" + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%)\n";
                 message += "📈 גבוה: " + d.h + " | 📉 נמוך: " + d.l + "\n";
-                message += "━━━━━━━━━━━━━━━\n";
+            } else {
+                // אם המחיר "לא משכנע" או לא קיים - עיגול אפור
+                message += "⚪ *" + s.name + "* (" + s.symbol.replace('.TA','') + ")\n";
+                message += "⚠️ נתוני בורסה לא זמינים כרגע\n";
             }
-        } catch (e) {}
+            message += "━━━━━━━━━━━━━━━\n";
+        } catch (e) {
+            message += "❌ שגיאה בטעינת " + s.name + "\n━━━━━━━━━━━━━━━\n";
+        }
     }
     bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 }
@@ -105,4 +113,4 @@ schedule.scheduleJob('30 17 * * 0-4', () => sendPortfolioUpdate(ilPortfolio, "�
 schedule.scheduleJob('30 16 * * 1-5', () => sendPortfolioUpdate(usPortfolio, "🔔 פתיחת מסחר בוול סטריט 🇺🇸"));
 schedule.scheduleJob('0 23 * * 1-5', () => sendPortfolioUpdate(usPortfolio, "🏁 סיכום מסחר בוול סטריט 🇺🇸"));
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Pro Fixed'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Visual Fix'); }).listen(process.env.PORT || 3000);
