@@ -8,91 +8,74 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
-// רשימת המניות שאתה מחזיק + כמויות
+// המניות שלך וכמויות
 const myStocks = [
-    { symbol: 'URA', name: 'Uranium ETF', qty: 24 },
-    { symbol: 'AAPL', name: 'Apple', qty: 4 },
-    { symbol: 'NVDA', name: 'Nvidia', qty: 1 },
-    { symbol: 'TSLA', name: 'Tesla', qty: 1 },
-    { symbol: 'META', name: 'Meta', qty: 1 }
+    { symbol: 'URA', name: 'אורניום', qty: 24 },
+    { symbol: 'AAPL', name: 'אפל', qty: 4 },
+    { symbol: 'NVDA', name: 'אנבידיה', qty: 1 },
+    { symbol: 'TSLA', name: 'טסלה', qty: 1 },
+    { symbol: 'META', name: 'מטא', qty: 1 }
 ];
 
-// רשימת מעקב ישראל
-const ilWatchlist = [
+// מניות למעקב ישראל
+const watchlistIL = [
     { symbol: 'LUMI.TA', name: 'לאומי' },
-    { symbol: 'POLI.TA', name: 'פועלים' },
-    { symbol: 'ICL.TA', name: 'איי.סי.אל' }
+    { symbol: 'POLI.TA', name: 'פועלים' }
 ];
-
-function getIsraelTime() {
-    return new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
-}
 
 function isUSOpen() {
-    const il = getIsraelTime();
-    const day = il.getDay(); 
-    const hour = il.getHours();
-    const min = il.getMinutes();
+    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
+    const day = now.getDay(); 
+    const hour = now.getHours();
+    const min = now.getMinutes();
     const total = hour * 60 + min;
-    return (day >= 1 && day <= 5) && (total >= 930 && total <= 1380); // 15:30-23:00 (winter time check)
+    return (day >= 1 && day <= 5) && (total >= 990 && total <= 1380);
 }
 
-function isILOpen() {
-    const il = getIsraelTime();
-    const day = il.getDay(); 
-    const hour = il.getHours();
-    const min = il.getMinutes();
-    const total = hour * 60 + min;
-    return (day >= 0 && day <= 4) && (total >= 600 && total <= 1045);
-}
-
-async function sendPortfolioReport() {
-    let usdToIls = 3.65; // ברירת מחדל
+async function getSummary() {
+    let usdToIls = 3.65;
     try {
-        const rateRes = await axios.get('https://open.er-api.com/v6/latest/USD');
-        usdToIls = rateRes.data.rates.ILS;
+        const rate = await axios.get('https://open.er-api.com/v6/latest/USD');
+        usdToIls = rate.data.rates.ILS;
     } catch (e) {}
 
-    const usOpen = isUSOpen();
-    const ilOpen = isILOpen();
-    
-    let msg = "📊 *דוח תיק השקעות ומעקב*\n━━━━━━━━━━━━━━━\n\n";
-    
-    // חלק א': מניות ארה"ב (החזקות)
-    msg += usOpen ? "🇺🇸 *ארה\"ב - מסחר פעיל* 🟢\n" : "🇺🇸 *ארה\"ב - שוק סגור* ⚪\n";
+    let msg = "📊 *מצב השוק שלי*\n━━━━━━━━━━━━━━━\n\n";
     let totalDailyProfitUSD = 0;
+    const usOpen = isUSOpen();
 
+    // ארה"ב
+    msg += usOpen ? "🇺🇸 *ארה\"ב - מסחר פעיל* 🟢\n" : "🇺🇸 *ארה\"ב - שוק סגור* ⚪\n";
+    
     for (const s of myStocks) {
         try {
             const res = await axios.get("https://finnhub.io/api/v1/quote?symbol=" + s.symbol + "&token=" + finnhubKey);
             const d = res.data;
             if (d.c) {
                 const icon = usOpen ? (d.dp >= 0 ? "🟢" : "🔴") : "⚪";
-                const dailyProfit = (d.c - d.pc) * s.qty;
-                totalDailyProfitUSD += dailyProfit;
+                const profitUSD = (d.c - d.pc) * s.qty;
+                totalDailyProfitUSD += profitUSD;
                 
-                msg += icon + " *" + s.name + "* (" + s.qty + " יח')\n";
-                msg += "💰 מחיר: $" + d.c.toLocaleString() + " (" + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%)\n";
-                msg += "💵 רווח יומי: " + (dailyProfit >= 0 ? "+" : "") + "$" + dailyProfit.toFixed(2) + "\n\n";
+                msg += icon + " *" + s.name + "*\n";
+                msg += "מחיר: $" + d.c + " (" + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%)\n";
+                msg += "רווח יומי: " + (profitUSD >= 0 ? "+" : "") + "$" + profitUSD.toFixed(2) + "\n\n";
             }
         } catch (e) {}
     }
 
-    msg += "💰 *סה\"כ רווח יומי (ארה\"ב):*\n";
+    msg += "💰 *סה\"כ רווח יומי כרגע:*\n";
     msg += "💵 $" + totalDailyProfitUSD.toFixed(2) + "\n";
     msg += "🇮🇱 ₪" + (totalDailyProfitUSD * usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0}) + "\n";
     msg += "━━━━━━━━━━━━━━━\n\n";
 
-    // חלק ב': מעקב ישראל
-    msg += ilOpen ? "🇮🇱 *ישראל - מסחר פעיל* 🟢\n" : "🇮🇱 *ישראל - שוק סגור* ⚪\n";
-    for (const s of ilWatchlist) {
+    // ישראל
+    msg += "🇮🇱 *מעקב ישראל:*\n";
+    for (const s of watchlistIL) {
         try {
             const res = await axios.get("https://finnhub.io/api/v1/quote?symbol=" + s.symbol + "&token=" + finnhubKey);
             const d = res.data;
-            const icon = ilOpen ? (d.dp >= 0 ? "🟢" : "🔴") : "⚪";
+            const icon = "⚪"; // סגור כרגע
             if (d.c) {
-                msg += icon + " *" + s.name + "*\n";
-                msg += "💰 מחיר: ₪" + d.c.toLocaleString() + " (" + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%)\n\n";
+                msg += icon + " *" + s.name + "*: ₪" + d.c + " (" + (d.dp >= 0 ? "+" : "") + d.dp.toFixed(2) + "%)\n";
             }
         } catch (e) {}
     }
@@ -101,15 +84,10 @@ async function sendPortfolioReport() {
 }
 
 bot.on('message', (msg) => {
-    if (!msg.text || msg.chat.id.toString() !== chatId) return;
-    const txt = msg.text.trim().toLowerCase();
-    if (txt.includes("שוק") || txt.includes("מצב") || txt.includes("טבלה")) {
-        sendPortfolioReport();
-    }
+    if (msg.text && msg.text.includes("שוק")) getSummary();
 });
 
-// אוטומציה
-schedule.scheduleJob('30 17 * * 0-4', () => sendPortfolioReport()); // סיכום ישראל
-schedule.scheduleJob('0 23 * * 1-5', () => sendPortfolioReport());  // סיכום ארה"ב
+schedule.scheduleJob('30 17 * * 0-4', () => getSummary());
+schedule.scheduleJob('0 23 * * 1-5', () => getSummary());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Portfolio Live'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Live'); }).listen(process.env.PORT || 3000);
