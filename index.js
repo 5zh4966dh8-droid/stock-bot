@@ -20,9 +20,9 @@ const myPortfolio = [
     { symbol: 'URA', name: 'URA (Uranium)', initialIls: 2318, isIL: false },
     { symbol: 'CIBR', name: 'CIBR', initialIls: 2234, isIL: false },
     { symbol: 'GOOGL', name: 'Google', initialIls: 1872, isIL: false },
-    { symbol: '%5ETA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
-    { symbol: '%5ETAFN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
-    { symbol: '%5ETA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
+    { symbol: '^TA125.TA', name: 'TA-125 Index', initialIls: 9177, isIL: true },
+    { symbol: '^TAFN.TA', name: 'TA-Finance Index', initialIls: 4386, isIL: true },
+    { symbol: '^TA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
 ];
 
 const watchlist = [
@@ -36,13 +36,14 @@ const watchlist = [
 
 async function getStockData(s) {
     try {
-        if (s.isIL || s.symbol.includes('%5E')) {
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${s.symbol}`;
-            const res = await axios.get(url, { timeout: 5000 });
+        if (s.isIL || s.symbol.startsWith('^')) {
+            const cleanSymbol = s.symbol.replace('^', '%5E');
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}`;
+            const res = await axios.get(url, { timeout: 10000 });
             const data = res.data.chart.result[0].meta;
             return { c: data.regularMarketPrice, pc: data.previousClose, dp: ((data.regularMarketPrice - data.previousClose) / data.previousClose) * 100 };
         } else {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`, { timeout: 5000 });
+            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`, { timeout: 10000 });
             return res.data;
         }
     } catch (e) { return { c: 1, pc: 1, dp: 0 }; }
@@ -50,17 +51,16 @@ async function getStockData(s) {
 
 async function getUsdRate() {
     try {
-        const res = await axios.get('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });
+        const res = await axios.get('https://open.er-api.com/v6/latest/USD', { timeout: 7000 });
         return res.data.rates.ILS || 3.65;
     } catch (e) { return 3.65; }
 }
 
 async function getMarketNews() {
     try {
-        const res = await axios.get(`https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`, { timeout: 5000 });
-        if (!res.data || res.data.length === 0) return "No news available.";
+        const res = await axios.get(`https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`, { timeout: 7000 });
         return res.data.slice(0, 3).map(n => `▪️ *${n.headline}*`).join('\n');
-    } catch (e) { return "News service currently unavailable."; }
+    } catch (e) { return "News temporarily unavailable."; }
 }
 
 function checkGlobalMarketStatus() {
@@ -115,10 +115,9 @@ async function getReport() {
     }
 
     msg += `\n📰 *Latest Market News:*\n`;
-    const news = await getMarketNews();
-    msg += news;
+    msg += await getMarketNews();
 
-    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' }).catch(e => console.log("Telegram Error"));
 }
 
 bot.on('message', (msg) => { if (msg.text && (msg.text.includes("שוק") || msg.text.includes("תיק"))) getReport(); });
@@ -127,4 +126,4 @@ schedule.scheduleJob('20 16 * * 1-5', () => getReport());
 schedule.scheduleJob('50 22 * * 1-5', () => getReport());
 schedule.scheduleJob('15 17 * * 0-4', () => getReport());
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Full Suite Fixed'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Stable Bot'); }).listen(process.env.PORT || 3000);
