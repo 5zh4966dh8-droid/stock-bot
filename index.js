@@ -8,81 +8,91 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
-const myPortfolio = [
+const usPortfolio = [
     { symbol: 'URA', name: 'Uranium ETF' },
     { symbol: 'AAPL', name: 'Apple' },
     { symbol: 'NVDA', name: 'Nvidia' },
     { symbol: 'TSLA', name: 'Tesla' },
-    { symbol: 'GOOGL', name: 'Google' }
+    { symbol: 'META', name: 'Meta' }
 ];
 
-// פונקציה שמביאה שער דולר ממקור חלופי ואמין
-async function getUSD() {
-    try {
-        const res = await axios.get('https://open.er-api.com/v6/latest/USD');
-        const rate = res.data.rates.ILS;
-        if (rate) {
-            return `🇺🇸 🇮🇱 *שער הדולר:* **${rate.toFixed(3)} ש"ח**`;
-        }
-        return "⚠️ שער הדולר לא זמין כרגע.";
-    } catch (e) { 
-        return "❌ שגיאה זמנית בחיבור לשער הדולר."; 
-    }
+const ilPortfolio = [
+    { symbol: 'LUMI.TA', name: 'לאומי' },
+    { symbol: 'POLI.TA', name: 'פועלים' },
+    { symbol: 'NICE.TA', name: 'נייס' },
+    { symbol: 'ICL.TA', name: 'איי.סי.אל' }
+];
+
+function getIsraelTime() {
+    return new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
 }
 
-async function sendMarketNews() {
-    try {
-        const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`);
-        const news = res.data.slice(0, 3);
-        let nMsg = "🗞 *חדשות שוק והשקעות* 🗞\n\n";
-        news.forEach(i => {
-            nMsg += `🔹 *${i.headline}*\n🔗 [לינק לכתבה](${i.url})\n\n`;
-        });
-        bot.sendMessage(chatId, nMsg, { parse_mode: 'Markdown', disable_web_page_preview: true });
-    } catch (e) { bot.sendMessage(chatId, "❌ שגיאה במשיכת חדשות."); }
+function isUSOpen() {
+    const il = getIsraelTime();
+    const day = il.getDay(); 
+    const totalMin = il.getHours() * 60 + il.getMinutes();
+    return (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
 }
 
-async function sendUpdate(title) {
-    const usd = await getUSD();
-    let msg = `${title}\n${usd}\n━━━━━━━━━━━━━━━\n\n`;
+function isILOpen() {
+    const il = getIsraelTime();
+    const day = il.getDay(); 
+    const totalMin = il.getHours() * 60 + il.getMinutes();
+    return (day >= 0 && day <= 4) && (totalMin >= 600 && totalMin <= 1045);
+}
+
+async function sendPortfolioUpdate(portfolio, title, isIsrael = false) {
+    const il = getIsraelTime();
+    const timeStr = il.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = il.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
     
-    for (const s of myPortfolio) {
+    let message = `\${title}\n📅 \${dateStr} | 🕒 \${timeStr}\n━━━━━━━━━━━━━━━\n\n`;
+    
+    for (const s of portfolio) {
         try {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`);
-            const price = res.data.c;
-            const change = res.data.dp;
-            if (price) {
-                msg += `${change >= 0 ? "🟢" : "🔴"} *${s.symbol}*\n💰 *$${price}* (${change >= 0 ? "+" : ""}${change.toFixed(2)}%)\n━━━━━━━━━━━━━━━\n\n`;
+            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=\${s.symbol}&token=\${finnhubKey}`);
+            const d = res.data;
+            if (d.c) {
+                const icon = d.dp >= 0 ? "🟢" : "🔴";
+                const cur = isIsrael ? "₪" : "$";
+                message += `\${icon} *\${s.symbol.replace('.TA', '')}* (\${s.name})\n`;
+                message += `💰: *\${cur}\${d.c}* (\${d.dp >= 0 ? "+" : ""}\${d.dp.toFixed(2)}%)\n`;
+                message += `📈 \${d.h} | 📉 \${d.l}\n━━━━━━━━━━━━━━━\n\n`;
             }
-        } catch (e) { console.error("Error for " + s.symbol); }
+        } catch (e) {}
     }
-    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
 }
 
 bot.on('message', async (msg) => {
     if (!msg.text || msg.chat.id.toString() !== chatId) return;
-    const txt = msg.text.trim();
-    const low = txt.toLowerCase();
+    const txt = msg.text.trim().toLowerCase();
+    
+    if (txt.includes("שוק") || txt.includes("מצב")) {
+        if (isILOpen()) await sendPortfolioUpdate(ilPortfolio, "🇮🇱 *תל אביב - זמן אמת*", true);
+        else bot.sendMessage(chatId, "🇮🇱 *בורסת ישראל סגורה.*", { 
+            reply_markup: { inline_keyboard: [[{ text: "🇮🇱 הצג נתוני סגירה לישראל", callback_data: 'show_il' }]] } 
+        });
 
-    if (low.includes("חדשות")) {
-        await sendMarketNews();
-    } else if (low.includes("דולר")) {
-        const d = await getUSD();
-        bot.sendMessage(chatId, d, { parse_mode: 'Markdown' });
-    } else if (low.includes("שוק") || low.includes("מצב")) {
-        await sendUpdate("📊 *מצב השוק* 📊");
-    } else if (txt.length >= 2 && txt.length <= 5 && /^[A-Za-z]+$/.test(txt)) {
-        try {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${txt.toUpperCase()}&token=${finnhubKey}`);
-            if (res.data.c) {
-                const c = res.data.dp;
-                let sMsg = `🔍 *תוצאה עבור ${txt.toUpperCase()}*\n`;
-                sMsg += `${c >= 0 ? "🟢" : "🔴"} מחיר: *$${res.data.c}* (${c >= 0 ? "+" : ""}${c.toFixed(2)}%)\n`;
-                bot.sendMessage(chatId, sMsg, { parse_mode: 'Markdown' });
-            }
-        } catch (e) { bot.sendMessage(chatId, "שגיאה בחיפוש."); }
+        if (isUSOpen()) await sendPortfolioUpdate(usPortfolio, "🇺🇸 *וול סטריט - זמן אמת*");
+        else bot.sendMessage(chatId, "🇺🇸 *בורסת ארה\"ב סגורה.*", { 
+            reply_markup: { inline_keyboard: [[{ text: "🇺🇸 הצג נתוני סגירה לארה\"ב", callback_data: 'show_us' }]] } 
+        });
+    } else if (txt.includes("דולר")) {
+        const res = await axios.get('https://open.er-api.com/v6/latest/USD');
+        bot.sendMessage(chatId, `🇺🇸 🇮🇱 *שער הדולר:* **\${res.data.rates.ILS.toFixed(3)} ש"ח**`, { parse_mode: 'Markdown' });
     }
 });
 
-schedule.scheduleJob('0 23 * * 1-5', () => sendUpdate("🏁 *סיכום סגירה* 🏁"));
-http.createServer((req, res) => { res.writeHead(200); res.end('Final Version Active'); }).listen(process.env.PORT || 3000);
+bot.on('callback_query', (q) => {
+    if (q.data === 'show_us') sendPortfolioUpdate(usPortfolio, "📊 *ארה\"ב - נתוני סגירה*");
+    if (q.data === 'show_il') sendPortfolioUpdate(ilPortfolio, "📊 *ישראל - נתוני סגירה*", true);
+    bot.answerCallbackQuery(q.id);
+});
+
+schedule.scheduleJob('0 10 * * 0-4', () => sendPortfolioUpdate(ilPortfolio, "🔔 *פתיחת מסחר בתל אביב* 🇮🇱", true));
+schedule.scheduleJob('30 17 * * 0-4', () => sendPortfolioUpdate(ilPortfolio, "🏁 *סיכום מסחר בתל אביב* 🇮🇱", true));
+schedule.scheduleJob('30 16 * * 1-5', () => sendPortfolioUpdate(usPortfolio, "🔔 *פתיחת מסחר בוול סטריט* 🇺🇸"));
+schedule.scheduleJob('0 23 * * 1-5', () => sendPortfolioUpdate(usPortfolio, "🏁 *סיכום מסחר בוול סטריט* 🇺🇸"));
+
+http.createServer((req, res) => { res.writeHead(200); res.end('Stable'); }).listen(process.env.PORT || 3000);
