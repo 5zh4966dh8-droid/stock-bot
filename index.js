@@ -8,7 +8,6 @@ const chatId = '7326639240';
 const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
-// הגדרת כותרות לבקשות כדי שלא ניחסם
 const axiosConfig = { headers: { 'User-Agent': 'Mozilla/5.0' } };
 
 const myPortfolio = [
@@ -19,18 +18,26 @@ const myPortfolio = [
     { symbol: 'GOOGL', name: 'Google' }
 ];
 
+// פונקציה משופרת להבאת שער הדולר
 async function getUSD() {
     try {
-        const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=FX:USILS&token=${finnhubKey}`, axiosConfig);
-        return res.data.c ? `🇺🇸 🇮🇱 *שער הדולר:* **${res.data.c.toFixed(3)} ש"ח**` : "";
-    } catch (e) { return "❌ שגיאה בשער הדולר."; }
+        // ניסיון למשוך דרך סימול חלופי אם הראשון נכשל
+        const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=OANDA:USD_ILS&token=${finnhubKey}`, axiosConfig);
+        const price = res.data.c;
+        if (price) {
+            return `🇺🇸 🇮🇱 *שער הדולר:* **${price.toFixed(3)} ש"ח**`;
+        }
+        return "⚠️ שער הדולר לא זמין כרגע.";
+    } catch (e) { 
+        return "❌ שגיאה בחיבור לשער הדולר."; 
+    }
 }
 
 async function sendMarketNews() {
     try {
         const res = await axios.get(`https://finnhub.io/api/v1/news?category=business&token=${finnhubKey}`, axiosConfig);
         const news = res.data.slice(0, 3);
-        if (news.length === 0) return bot.sendMessage(chatId, "אין חדשות כרגע.");
+        if (!news || news.length === 0) return bot.sendMessage(chatId, "אין חדשות כרגע.");
         
         let nMsg = "🗞 *חדשות שוק והשקעות* 🗞\n\n";
         news.forEach(i => {
@@ -38,7 +45,7 @@ async function sendMarketNews() {
         });
         bot.sendMessage(chatId, nMsg, { parse_mode: 'Markdown', disable_web_page_preview: true });
     } catch (e) { 
-        bot.sendMessage(chatId, "❌ שגיאה במשיכת חדשות. נסה שוב בעוד דקה.");
+        bot.sendMessage(chatId, "❌ שגיאה במשיכת חדשות.");
     }
 }
 
