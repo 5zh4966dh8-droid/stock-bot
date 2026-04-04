@@ -5,7 +5,6 @@ const schedule = require('node-schedule');
 
 const token = '8504502159:AAEVZoVnSXqaV1zMq2MiHsfdlMeyHORJEXw';
 const chatId = '7326639240';
-const finnhubKey = 'd780k01r01qsamsifve0d780k01r01qsamsifveg';
 const bot = new TelegramBot(token, { polling: true });
 
 const myPortfolio = [
@@ -25,58 +24,75 @@ const myPortfolio = [
     { symbol: '^TA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
 ];
 
-async function getStockData(s) {
+async function getHistoricalData(s) {
     try {
-        if (s.isIL || s.symbol.startsWith('^')) {
-            const cleanSymbol = s.symbol.replace('^', '%5E');
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}`;
-            const res = await axios.get(url, { timeout: 10000 });
-            const data = res.data.chart.result[0].meta;
-            return { c: data.regularMarketPrice, pc: data.previousClose, dp: ((data.regularMarketPrice - data.previousClose) / data.previousClose) * 100 };
-        } else {
-            const res = await axios.get(`https://finnhub.io/api/v1/quote?symbol=${s.symbol}&token=${finnhubKey}`, { timeout: 10000 });
-            return res.data;
-        }
-    } catch (e) { return { c: 1, pc: 1, dp: 0 }; }
+        const symbol = s.symbol.replace('^', '%5E');
+        // מושכים נתונים לשנה האחרונה
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1y&interval=1d`;
+        const res = await axios.get(url, { timeout: 15000 });
+        const result = res.data.chart.result[0];
+        const prices = result.indicators.quote[0].close.filter(p => p != null);
+        const current = result.meta.regularMarketPrice;
+        const prevClose = result.meta.previousClose;
+        
+        const priceWeekAgo = prices[prices.length - 6] || prices[0];
+        const priceMonthAgo = prices[prices.length - 22] || prices[0];
+        const priceYearAgo = prices[0];
+
+        return {
+            current,
+            dayP: ((current - prevClose) / prevClose) * 100,
+            weekP: ((current - priceWeekAgo) / priceWeekAgo) * 100,
+            monthP: ((current - priceMonthAgo) / priceMonthAgo) * 100,
+            yearP: ((current - priceYearAgo) / priceYearAgo) * 100
+        };
+    } catch (e) { return null; }
 }
 
-async function getUsdRate() {
+async function getUsd() {
     try {
-        const res = await axios.get('https://open.er-api.com/v6/latest/USD', { timeout: 7000 });
-        return res.data.rates.ILS || 3.65;
+        const res = await axios.get('https://open.er-api.com/v6/latest/USD');
+        return res.data.rates.ILS;
     } catch (e) { return 3.65; }
 }
 
 async function getReport() {
-    const usdToIls = await getUsdRate();
-    let results = [];
+    const usd = await getUsd();
+    let totalIls = 0, totalProfitDay = 0;
+    let msg = `🏅 *DOREL STRATEGY - EXECUTIVE REPORT*\n`;
+    msg += `━━━━━━━━━━━━━━━━━━\n💵 USD/ILS: *${usd.toFixed(2)}* | 🗓 ${new Date().toLocaleDateString('he-IL')}\n━━━━━━━━━━━━━━━━━━\n\n`;
+
     for (const s of myPortfolio) {
-        const d = await getStockData(s);
-        const profitTodayIls = s.initialIls * (d.dp / 100);
-        results.push({ ...s, currentValIls: s.initialIls + profitTodayIls, dp: d.dp, profitTodayIls });
+        const d = await getHistoricalData(s);
+        if (!d) continue;
+
+        const profitTodayIls = s.initialIls * (d.dayP / 100);
+        const currentValIls = s.initialIls + profitTodayIls;
+        const currentValUsd = currentValIls / usd;
+        
+        totalIls += currentValIls;
+        totalProfitDay += profitTodayIls;
+
+        msg += `💎 *${s.name}*\n`;
+        msg += `💰 ₪${currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0})} | $${currentValUsd.toLocaleString(undefined, {maximumFractionDigits: 0})}\n`;
+        msg += `📈 Today: *${(profitTodayIls >= 0 ? "+" : "")}₪${profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0})}* (${d.dayP.toFixed(2)}%)\n`;
+        msg += `📊 Week: *${d.weekP.toFixed(2)}%* | Month: *${d.monthP.toFixed(2)}%*\n`;
+        msg += `📅 Year: *${d.yearP.toFixed(2)}%*\n`;
+        msg += `──────────────────\n`;
     }
 
-    results.sort((a, b) => (a.isIL === b.isIL ? b.currentValIls - a.currentValIls : a.isIL ? 1 : -1));
-
-    let msg = `💎 *Dorel's Portfolio* 💎\n━━━━━━━━━━━━━━━\n💵 USD/ILS: *${usdToIls.toFixed(2)}*\n━━━━━━━━━━━━━━━\n\n`;
-    let totalIls = 0, totalProfit = 0;
-
-    for (const r of results) {
-        totalIls += r.currentValIls;
-        totalProfit += r.profitTodayIls;
-        msg += `⚪ *${r.name}*\n💰 ₪${r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0})} | $${(r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0})}\n📈 ${(r.profitTodayIls >= 0 ? "+" : "")}₪${r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0})} (${r.dp.toFixed(2)}%)\n━━━━━━━━━━━━━━━\n`;
-    }
-
-    msg += `\n👑 *Total: ₪${totalIls.toLocaleString(undefined, {maximumFractionDigits: 0})}* ($${(totalIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0})})\n📊 Daily: ${(totalProfit >= 0 ? "🟢 +" : "🔴 ")}₪${totalProfit.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    msg += `\n🏆 *TOTAL PORTFOLIO SUMMARY*\n`;
+    msg += `💰 Market Value: *₪${totalIls.toLocaleString(undefined, {maximumFractionDigits: 0})}*\n`;
+    msg += `💵 Dollar Value: *$${(totalIls / usd).toLocaleString(undefined, {maximumFractionDigits: 0})}*\n`;
+    msg += `📊 Daily Change: ${(totalProfitDay >= 0 ? "🟢 +" : "🔴 ")}₪${totalProfitDay.toLocaleString(undefined, {maximumFractionDigits: 0})}\n`;
     
-    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' }).catch(() => {});
+    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' }).catch(console.error);
 }
 
-bot.on('message', (msg) => { if (msg.text && (msg.text.includes("שוק") || msg.text.includes("תיק"))) getReport(); });
+bot.on('message', (m) => { if (m.text && (m.text.includes("שוק") || m.text.includes("תיק"))) getReport(); });
 
-// אוטומציות (16:20, 22:50 ארה"ב | 17:15 ישראל)
 schedule.scheduleJob('20 16 * * 1-5', getReport);
 schedule.scheduleJob('50 22 * * 1-5', getReport);
 schedule.scheduleJob('15 17 * * 0-4', getReport);
 
-http.createServer((req, res) => { res.end('Bot is Live'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => res.end('Dorel Strategy Live')).listen(process.env.PORT || 3000);
