@@ -25,15 +25,6 @@ const myPortfolio = [
     { symbol: '^TA90.TA', name: 'TA-90 Index', initialIls: 18079, isIL: true }
 ];
 
-const watchlist = [
-    { symbol: 'NVDA', name: 'Nvidia' },
-    { symbol: 'TSLA', name: 'Tesla' },
-    { symbol: 'META', name: 'Meta' },
-    { symbol: 'SMH', name: 'SMH' },
-    { symbol: 'OPEN', name: 'OPEN' },
-    { symbol: 'WDC', name: 'SanDisk (WDC)' }
-];
-
 async function getStockData(s) {
     try {
         if (s.isIL || s.symbol.startsWith('^')) {
@@ -56,74 +47,36 @@ async function getUsdRate() {
     } catch (e) { return 3.65; }
 }
 
-async function getMarketNews() {
-    try {
-        const res = await axios.get(`https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`, { timeout: 7000 });
-        return res.data.slice(0, 3).map(n => `▪️ *${n.headline}*`).join('\n');
-    } catch (e) { return "News temporarily unavailable."; }
-}
-
-function checkGlobalMarketStatus() {
-    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
-    const day = now.getDay(), hour = now.getHours(), min = now.getMinutes();
-    const totalMin = hour * 60 + min;
-    const isUSOpen = (day >= 1 && day <= 5) && (totalMin >= 990 && totalMin <= 1380);
-    return isUSOpen ? "🟢 MARKET IS OPEN" : "⚪ MARKET IS CLOSED";
-}
-
 async function getReport() {
     const usdToIls = await getUsdRate();
     let results = [];
     for (const s of myPortfolio) {
         const d = await getStockData(s);
         const profitTodayIls = s.initialIls * (d.dp / 100);
-        const currentValIls = s.initialIls + profitTodayIls;
-        results.push({ ...s, currentValIls, profitTodayIls, dp: d.dp });
+        results.push({ ...s, currentValIls: s.initialIls + profitTodayIls, dp: d.dp, profitTodayIls });
     }
 
-    results.sort((a, b) => {
-        if (a.isIL && !b.isIL) return 1;
-        if (!a.isIL && b.isIL) return -1;
-        return b.currentValIls - a.currentValIls;
-    });
+    results.sort((a, b) => (a.isIL === b.isIL ? b.currentValIls - a.currentValIls : a.isIL ? 1 : -1));
 
-    let msg = `💎 *Dorel's Portfolio* 💎\n━━━━━━━━━━━━━━━\n`;
-    msg += `🌎 ${checkGlobalMarketStatus()}\n`;
-    msg += `💵 USD/ILS: *${usdToIls.toFixed(2)}*\n`;
-    msg += `━━━━━━━━━━━━━━━\n\n`;
-
+    let msg = `💎 *Dorel's Portfolio* 💎\n━━━━━━━━━━━━━━━\n💵 USD/ILS: *${usdToIls.toFixed(2)}*\n━━━━━━━━━━━━━━━\n\n`;
     let totalIls = 0, totalProfit = 0;
+
     for (const r of results) {
         totalIls += r.currentValIls;
         totalProfit += r.profitTodayIls;
-        const icon = r.isIL ? "⚪" : (checkGlobalMarketStatus().includes("OPEN") ? (r.dp >= 0 ? "🟢" : "🔴") : "⚪");
-        msg += `${icon} *${r.name}*\n`;
-        msg += `💰 Value: ₪${r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0})} | $${(r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0})}\n`;
-        msg += `📈 Today: ${(r.profitTodayIls >= 0 ? "+" : "")}₪${r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0})} (${r.dp.toFixed(2)}%)\n`;
-        msg += `━━━━━━━━━━━━━━━\n`;
+        msg += `⚪ *${r.name}*\n💰 ₪${r.currentValIls.toLocaleString(undefined, {maximumFractionDigits: 0})} | $${(r.currentValIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0})}\n📈 ${(r.profitTodayIls >= 0 ? "+" : "")}₪${r.profitTodayIls.toLocaleString(undefined, {maximumFractionDigits: 0})} (${r.dp.toFixed(2)}%)\n━━━━━━━━━━━━━━━\n`;
     }
 
-    msg += `\n👑 *Total Summary:*\n`;
-    msg += `💰 Market Value: *₪${totalIls.toLocaleString(undefined, {maximumFractionDigits: 0})}*\n`;
-    msg += `💵 USD Value: *$${(totalIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0})}*\n`;
-    msg += `📊 Daily P/L: ${(totalProfit >= 0 ? "🟢 +" : "🔴 ")}₪${totalProfit.toLocaleString(undefined, {maximumFractionDigits: 0})}\n\n`;
-
-    msg += `👀 *Watchlist:*\n`;
-    for (const s of watchlist) {
-        const d = await getStockData(s);
-        msg += `⚪ *${s.name}*: ${(d.dp >= 0 ? "+" : "")}${d.dp.toFixed(2)}%\n`;
-    }
-
-    msg += `\n📰 *Latest Market News:*\n`;
-    msg += await getMarketNews();
-
-    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' }).catch(e => console.log("Telegram Error"));
+    msg += `\n👑 *Total: ₪${totalIls.toLocaleString(undefined, {maximumFractionDigits: 0})}* ($${(totalIls / usdToIls).toLocaleString(undefined, {maximumFractionDigits: 0})})\n📊 Daily: ${(totalProfit >= 0 ? "🟢 +" : "🔴 ")}₪${totalProfit.toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+    
+    bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' }).catch(() => {});
 }
 
 bot.on('message', (msg) => { if (msg.text && (msg.text.includes("שוק") || msg.text.includes("תיק"))) getReport(); });
 
-schedule.scheduleJob('20 16 * * 1-5', () => getReport());
-schedule.scheduleJob('50 22 * * 1-5', () => getReport());
-schedule.scheduleJob('15 17 * * 0-4', () => getReport());
+// אוטומציות (16:20, 22:50 ארה"ב | 17:15 ישראל)
+schedule.scheduleJob('20 16 * * 1-5', getReport);
+schedule.scheduleJob('50 22 * * 1-5', getReport);
+schedule.scheduleJob('15 17 * * 0-4', getReport);
 
-http.createServer((req, res) => { res.writeHead(200); res.end('Dorel Stable Bot'); }).listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.end('Bot is Live'); }).listen(process.env.PORT || 3000);
